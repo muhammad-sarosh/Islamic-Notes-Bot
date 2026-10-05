@@ -1,0 +1,14 @@
+.git
+.venv
+venv
+__pycache__
+.pytest_cache
+.ruff_cache
+existing_project
+tests
+.env
+.env.*
+data
+storage
+model-cache
+logs

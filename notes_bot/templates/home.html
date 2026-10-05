@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block content %}
+<div class="heading"><div><p class="eyebrow">WORKSPACE</p><h1>Lecture jobs</h1><p class="muted">Create a draft in Discord with <code>/createnotes</code>, then review it here.</p></div><a class="button quiet" href="/courses">Manage courses</a></div>
+<section class="panel table-wrap"><table><thead><tr><th>Job</th><th>Course</th><th>Task</th><th>Status</th><th>Progress</th></tr></thead><tbody>
+{% for job in jobs %}<tr><td><a href="/jobs/{{ job.id }}">#{{ job.id }}</a></td><td>{{ job.course_name }}</td><td>{{ job.kind }}{% if job.payload.lecture %} · {{ job.payload.lecture }}{% endif %}</td><td><span class="badge {{ job.status }}">{{ job.status|replace('_',' ') }}</span></td><td>{{ job.stage }}</td></tr>
+{% else %}<tr><td colspan="5">No jobs yet. Add a course and textbook, then use <code>/createnotes</code> in Discord.</td></tr>{% endfor %}
+</tbody></table></section>{% endblock %}

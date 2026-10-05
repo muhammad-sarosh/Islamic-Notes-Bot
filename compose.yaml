@@ -1,0 +1,44 @@
+services:
+  app:
+    build:
+      context: .
+      target: app
+    restart: unless-stopped
+    environment: &environment
+      DATABASE_URL: ${DATABASE_URL:?}
+      PUBLIC_URL: ${PUBLIC_URL:?}
+      SESSION_SECRET: ${SESSION_SECRET:?}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:?}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:?}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?}
+      ALLOWED_USER_IDS: ${ALLOWED_USER_IDS:?}
+      GROQ_API_KEY: ${GROQ_API_KEY:?}
+      NINEROUTER_BASE_URL: ${NINEROUTER_BASE_URL:?}
+      NINEROUTER_API_KEY: ${NINEROUTER_API_KEY:-}
+      NINEROUTER_MODEL: ${NINEROUTER_MODEL:?}
+      DATA_DIR: /data
+      MAX_AUDIO_SECONDS: ${MAX_AUDIO_SECONDS:-14400}
+      LLM_CONTEXT_CHARS: ${LLM_CONTEXT_CHARS:-500000}
+    expose:
+      - "8000"
+    mem_limit: 512m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+  worker:
+    build:
+      context: .
+      target: worker
+    restart: unless-stopped
+    environment: *environment
+    volumes:
+      - worker-data:/data
+    mem_limit: ${WORKER_MEMORY_LIMIT:-3g}
+    cpus: 1.0
+    stop_grace_period: 30s
+volumes:
+  worker-data:
