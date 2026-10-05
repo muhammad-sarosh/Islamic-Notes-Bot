@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -18,6 +19,37 @@ log = logging.getLogger(__name__)
 
 
 async def process(command, cwd, callback=None, timeout=7200):
+    if sys.platform == "win32":
+        # PostgreSQL needs SelectorEventLoop on Windows, whose asyncio subprocess
+        # API is unavailable. Drain a normal subprocess through executor threads.
+        with subprocess.Popen(
+            command,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        ) as proc:
+            try:
+                async with asyncio.timeout(timeout):
+                    while line := await asyncio.to_thread(proc.stdout.readline):
+                        if callback:
+                            try:
+                                event = json.loads(line)
+                            except ValueError:
+                                continue
+                            if isinstance(event, dict) and "progress" in event:
+                                await callback(event["progress"])
+                    code = await asyncio.to_thread(proc.wait)
+                    if code:
+                        raise RuntimeError(f"{Path(command[0]).name} exited with code {code}")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                await asyncio.to_thread(proc.wait)
+        return
     proc = await asyncio.create_subprocess_exec(
         *command, cwd=cwd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )

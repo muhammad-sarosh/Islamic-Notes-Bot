@@ -87,7 +87,7 @@ def create_app(settings=None):
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.session_secret,
-        https_only=True,
+        https_only=settings.public_url.startswith("https://"),
         same_site="lax",
         max_age=86400,
         session_cookie="notes_session",

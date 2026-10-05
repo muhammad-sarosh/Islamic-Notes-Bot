@@ -1,5 +1,6 @@
 import json
 from base64 import b64encode
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -75,6 +76,17 @@ async def test_preview_requires_valid_session_and_csrf():
         assert "<strong>Safe</strong>" in response.text
         assert (await client.post("/logout", data={"csrf": "known-token"})).status_code == 303
         assert (await client.get("/")).status_code == 303
+
+
+async def test_localhost_login_cookie_supports_http():
+    app = create_app(replace(settings(), public_url="http://localhost:8000", development=True))
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://localhost:8000"
+    ) as client:
+        response = await client.get("/auth/discord")
+        assert "secure" not in response.headers["set-cookie"].lower()
+        assert "httponly" in response.headers["set-cookie"].lower()
+        assert "localhost%3A8000%2Fauth%2Fcallback" in response.headers["location"]
 
 
 @pytest.mark.parametrize("name", ["job.html", "course.html", "rules.html"])

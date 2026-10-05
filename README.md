@@ -52,6 +52,8 @@ With `DATABASE_URL` set to the bot database, add `--apply` to import the four cu
 
 ## Development and checks
 
+For a full local run on Windows, follow [LOCAL_SETUP.md](LOCAL_SETUP.md). The local launcher loads `.env`, selects the Windows event loop required by PostgreSQL, and supports localhost HTTP while production continues to require HTTPS.
+
 Use Python 3.12:
 
 ```powershell

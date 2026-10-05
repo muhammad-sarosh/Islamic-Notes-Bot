@@ -1,0 +1,19 @@
+# Optional local database only. App/worker run in your Python environment.
+services:
+  database:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: notes_local
+      POSTGRES_PASSWORD: notes_local
+      POSTGRES_DB: notes_local
+    ports:
+      - "127.0.0.1:54329:5432"
+    volumes:
+      - local-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notes_local -d notes_local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  local-postgres:

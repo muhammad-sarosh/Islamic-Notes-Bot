@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 from dataclasses import replace
 
 import httpx
@@ -9,9 +10,21 @@ import pytest_asyncio
 import notes_bot.worker as worker_module
 from notes_bot.db import Database
 from notes_bot.services import queue_generation, queue_index, queue_publication, retry_job
-from notes_bot.worker import Worker, api_post
+from notes_bot.worker import Worker, api_post, process
 from tests.test_database import ready_course
 from tests.test_web import settings
+
+
+async def test_subprocess_progress_works_with_database_compatible_loop(tmp_path):
+    progress = []
+
+    async def update(stage):
+        progress.append(stage)
+
+    await process(
+        [sys.executable, "-c", 'print(\'{"progress":"Child process completed"}\')'], tmp_path, update
+    )
+    assert progress == ["Child process completed"]
 
 
 async def test_api_retries_only_rate_limit_and_rewinds_file(monkeypatch, tmp_path):
