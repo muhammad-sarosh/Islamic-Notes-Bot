@@ -1,0 +1,324 @@
+{
+  "name": "Create Notes",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -608,
+        16
+      ],
+      "id": "b9498e6f-6170-42a6-82c5-9c2149c736f8",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "command": "=/home/sushi/lecture-tools-venv/bin/yt-dlp \\\n  --remote-components ejs:npm \\\n  -f \"bestaudio[ext=webm][abr<=80]/bestaudio[ext=webm]\" \\\n  -N 4 \\\n  --no-playlist \\\n  -o \"{{ $('Config').first().json.audio_file }}\" \\\n  \"{{ $('Config').first().json.youtube_url }}\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        288,
+        112
+      ],
+      "id": "3981b15b-ebc1-4aa1-ab77-1bd88e473a93",
+      "name": "Download YouTube Audio"
+    },
+    {
+      "parameters": {
+        "command": "=\"{{ $('Config').first().json.python }}\" \\\n  \"{{ $('Config').first().json.tools_root }}/transcribe.py\" \\\n  \"{{ $('Config').first().json.audio_file }}\" \\\n  \"{{ $('Config').first().json.transcript_file }}\" \\\n  large-v3-turbo"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        512,
+        112
+      ],
+      "id": "88da802b-fec9-4cdd-87c3-3fc0214af3a7",
+      "name": "Transcribe Audio"
+    },
+    {
+      "parameters": {
+        "command": "={\n  cat \"{{ $('Config').first().json.shared_rules_file }}\"\n  printf '\\n\\n'\n\n  if [ -f \"{{ $('Course Config').first().json.course_rules_file }}\" ]; then\n    cat \"{{ $('Course Config').first().json.course_rules_file }}\"\n  else\n    cat \"{{ $('Course Config').first().json.fallback_rules_file }}\"\n  fi\n\n  printf '\\n\\n'\n  cat \"{{ $('Config').first().json.discord_rules_file }}\"\n  printf '\\n\\n===== LECTURE + RETRIEVAL CONTEXT =====\\n\\n'\n  cat \"{{ $('Config').first().json.retrieval_context_file }}\"\n} | codex exec \\\n  --skip-git-repo-check \\\n  --model gpt-6-luna \\\n  --config 'model_reasoning_effort=\"high\"' \\\n  --sandbox read-only \\\n  --output-last-message \"{{ $('Config').first().json.generated_notes_file }}\" \\\n  \"The lecture number is {{ $('Config').first().json.lecture_number }}. Use the supplied lecture transcript as the source material and produce the notes according to all applicable rules above. The retrieval context contains transcript chunks paired with candidate textbook references. E5 rank is the initial embedding-retrieval rank and BGE rank is the reranker relevance rank; lower is better, but both are only retrieval signals. Judge each reference against the transcript and ignore any that are not relevant.\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1184,
+        112
+      ],
+      "id": "369a501e-ca42-42e5-a616-925db18851fa",
+      "name": "Make Notes"
+    },
+    {
+      "parameters": {
+        "command": "=\"{{ $('Config').first().json.python }}\" \\\n  \"{{ $('Config').first().json.tools_root }}/retrieve_references.py\" \\\n  \"{{ $('Config').first().json.transcript_file }}\" \\\n  \"{{ $('Course Config').first().json.course_index_file }}\" \\\n  \"{{ $('Config').first().json.retrieval_context_file }}\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        960,
+        112
+      ],
+      "id": "3dbf03d8-d98e-4644-8c7d-4b5e412d0822",
+      "name": "Retrieve References"
+    },
+    {
+      "parameters": {
+        "command": "=mkdir -p \"{{ $('Config').first().json.work_dir }}\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        64,
+        112
+      ],
+      "id": "067188c2-2249-43f3-a20f-2fb512713b49",
+      "name": "Create Work Directory"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1927b309-18bb-40bd-ba8a-4b5d612805e4",
+              "name": "youtube_url",
+              "value": "https://youtu.be/HuM41bMIFIE",
+              "type": "string"
+            },
+            {
+              "id": "71f92a47-a3fa-4a74-89e3-7a644d7ccb4c",
+              "name": "course",
+              "value": "mustalah",
+              "type": "string"
+            },
+            {
+              "id": "b2901ff3-eddf-4b8d-84a0-58e0a78210b5",
+              "name": "lecture_number",
+              "value": "1/1",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -384,
+        16
+      ],
+      "id": "9684de4a-5779-41e0-8e7a-c49b08b1b31c",
+      "name": "Base Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $input.first().json;\n\nconst toolsRoot = '/home/sushi/lecture-tools';\nconst workRoot = '/home/sushi/lecture-work';\n\n// Human-editable notes location\nconst reviewRoot = '/mnt/s/Miscellaneous/Lecture-Notes';\nconst reviewRootWindows = 'S:\\\\Miscellaneous\\\\Lecture-Notes';\n\nconst lectureId = base.lecture_number.replace('/', '-');\n\nconst workDir =\n  `${workRoot}/${base.course}/lecture-${lectureId}-run-${$execution.id}`;\n\nconst finalNotesFile =\n  `${reviewRoot}/${base.course}/lecture-${lectureId}-run-${$execution.id}.md`;\n\nconst finalNotesWindowsPath =\n  `${reviewRootWindows}\\\\${base.course}\\\\lecture-${lectureId}-run-${$execution.id}.md`;\n\nreturn [{\n  json: {\n    ...base,\n\n    tools_root: toolsRoot,\n    work_root: workRoot,\n    review_root: reviewRoot,\n\n    python: '/home/sushi/lecture-tools-venv/bin/python',\n\n    lecture_id: lectureId,\n    work_dir: workDir,\n\n    // Internal per-run files\n    audio_file: `${workDir}/audio.webm`,\n    transcript_file: `${workDir}/transcript.txt`,\n    retrieval_context_file: `${workDir}/retrieval-context.txt`,\n    generated_notes_file: `${workDir}/generated-notes.md`,\n\n    // Human-edited final notes\n    final_notes_file: finalNotesFile,\n    final_notes_windows_path: finalNotesWindowsPath,\n\n    shared_rules_file: `${toolsRoot}/prompts/shared-notes.md`,\n    discord_rules_file: `${toolsRoot}/prompts/discord-format.md`,\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        112
+      ],
+      "id": "eb07a41f-3740-4c8a-a157-edb7665b08c0",
+      "name": "Config"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Config').first().json;\n\nconst course = data.course.trim().toLowerCase();\n\nconst defaultRules = `${data.tools_root}/prompts/none.md`;\nconst courseRules = `${data.tools_root}/prompts/${course}.md`;\nconst courseIndex = `${data.tools_root}/course-pdfs/${course}-e5base-index.json`;\n\nreturn [{\n  json: {\n    ...data,\n    course_rules_file: courseRules,\n    fallback_rules_file: defaultRules,\n    course_index_file: courseIndex,\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        736,
+        112
+      ],
+      "id": "f5f3e9a2-53e5-4224-a837-639e90313347",
+      "name": "Course Config"
+    },
+    {
+      "parameters": {
+        "command": "=mkdir -p \"$(dirname \"{{ $('Config').first().json.final_notes_file }}\")\"\n\ncp \\\n  \"{{ $('Config').first().json.generated_notes_file }}\" \\\n  \"{{ $('Config').first().json.final_notes_file }}\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        112
+      ],
+      "id": "7341f8f2-72f9-4fef-a5aa-58cb3bd1bbf8",
+      "name": "Copy notes to windows"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -384,
+        208
+      ],
+      "id": "3634495a-fc79-4365-8c3d-03cb2bdbd49b",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/webhooks/REDACTED_ID/REDACTED_TOKEN",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  content:\n    `Notes created successfully.\n\nYou can review and edit them here:\n\\`${$('Config').first().json.final_notes_windows_path}\\`\n\nTo publish them, run:\n\\`!sendnotes ${$('Config').first().json.course} ${$('Config').first().json.lecture_number} ${$execution.id}\\``\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1632,
+        112
+      ],
+      "id": "b33047c0-ceb8-466f-93fd-e3b487bc0489",
+      "name": "Send confirmation message"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Base Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download YouTube Audio": {
+      "main": [
+        [
+          {
+            "node": "Transcribe Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe Audio": {
+      "main": [
+        [
+          {
+            "node": "Course Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve References": {
+      "main": [
+        [
+          {
+            "node": "Make Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Work Directory": {
+      "main": [
+        [
+          {
+            "node": "Download YouTube Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Base Data": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Create Work Directory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Course Config": {
+      "main": [
+        [
+          {
+            "node": "Retrieve References",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make Notes": {
+      "main": [
+        [
+          {
+            "node": "Copy notes to windows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Copy notes to windows": {
+      "main": [
+        [
+          {
+            "node": "Send confirmation message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "aaaa94bc-d6fc-4c20-b8b5-7d3db8aeee6b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "beaf45199103b052a0dcb04006cb943d00057eec0d444a6fb82ebe059856f88d"
+  },
+  "nodeGroups": [],
+  "id": "3tX2k0oowA6vJaMW",
+  "tags": []
+}

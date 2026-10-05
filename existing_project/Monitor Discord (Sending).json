@@ -1,0 +1,219 @@
+{
+  "name": "Monitor Discord (Sending)",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -304
+      ],
+      "id": "f3c0bdbf-cb06-43d6-9241-ebab329ccc62",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "url": "https://discord.com/api/v10/channels/1555707008513216524/messages?limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bot TOKEN_PLACEHOLDER"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        -208
+      ],
+      "id": "421f187d-50bf-4b79-80ba-46dfc68d637d",
+      "name": "Check discord messages"
+    },
+    {
+      "parameters": {
+        "jsCode": "const message = $input.first().json;\n\n// Only accept !sendnotes\nif (\n  typeof message.content !== 'string' ||\n  !message.content.trim().toLowerCase().startsWith('!sendnotes')\n) {\n  return [];\n}\n\nconst state = $getWorkflowStaticData('global');\n\n// Already processed\nif (state.lastProcessedMessageId === message.id) {\n  return [];\n}\n\nconst parts = message.content.trim().split(/\\s+/).slice(1);\n\nlet course = null;\nlet lecture_number = null;\nlet run_id = null;\n\nfor (const part of parts) {\n  if (/^\\d+\\/\\d+$/.test(part)) {\n    lecture_number = part;\n  } else if (/^\\d+$/.test(part)) {\n    run_id = part;\n  } else if (!course) {\n    course = part.toLowerCase();\n  }\n}\n\nif (!course || !lecture_number || !run_id) {\n  throw new Error(`Invalid command: \"${message.content}\"`);\n}\n\nreturn [{\n  json: {\n    course,\n    lecture_number,\n    run_id,\n    discord_message_id: message.id,\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        -208
+      ],
+      "id": "35313c45-272c-4298-888c-2da076316b44",
+      "name": "Extract data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const state = $getWorkflowStaticData('global');\n\nconst data = $('Extract data').first().json;\n\nstate.lastProcessedMessageId = data.discord_message_id;\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        -112
+      ],
+      "id": "3026296f-ca3b-41fd-aabf-538f92c7a7a9",
+      "name": "Store last message id"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "Ts4FDXVYui2JxXjV",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/Ts4FDXVYui2JxXjV",
+          "cachedResultName": "Send Lecture Notes"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        896,
+        -112
+      ],
+      "id": "82a271f9-ad4e-4e25-b449-0c043114abd4",
+      "name": "Call 'Send Lecture Notes'"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 15
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        -112
+      ],
+      "id": "1b629c3a-5f3c-4ece-a55e-bc423a302182",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/webhooks/REDACTED_ID/REDACTED_TOKEN",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"content\" : \"Command received.\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        -304
+      ],
+      "id": "7f303388-37a4-4eca-8762-08fba9e08f0a",
+      "name": "Send confirmation message"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Check discord messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check discord messages": {
+      "main": [
+        [
+          {
+            "node": "Extract data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract data": {
+      "main": [
+        [
+          {
+            "node": "Send confirmation message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Store last message id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store last message id": {
+      "main": [
+        [
+          {
+            "node": "Call 'Send Lecture Notes'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Send Lecture Notes'": {
+      "main": [
+        []
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Check discord messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send confirmation message": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "6b20a9f8-7052-4f1a-81ae-a4cfa2a94a81",
+  "meta": {
+    "instanceId": "beaf45199103b052a0dcb04006cb943d00057eec0d444a6fb82ebe059856f88d"
+  },
+  "nodeGroups": [],
+  "id": "X8AsI0H0tBmVPgAR",
+  "tags": []
+}

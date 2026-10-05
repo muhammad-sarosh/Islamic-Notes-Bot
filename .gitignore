@@ -1,0 +1,39 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python environments and generated files
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.coverage
+htmlcov/
+
+# Runtime storage and model caches (reference assets remain tracked)
+/data/
+/storage/
+/model-cache/
+/logs/
+*.log
+*.sqlite
+*.sqlite3
+
+# Frontend dependencies and build output
+node_modules/
+.next/
+
+# Local editor and OS files
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store

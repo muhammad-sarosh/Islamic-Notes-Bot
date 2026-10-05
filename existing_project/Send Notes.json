@@ -1,0 +1,273 @@
+{
+  "name": "Send Notes",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        80
+      ],
+      "id": "8d7cfcd5-b2af-4cc5-919a-aed2bcdee996",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fcae0cb9-5911-436d-890b-4ed7b6b923a9",
+              "name": "course",
+              "value": "mustalah",
+              "type": "string"
+            },
+            {
+              "id": "81e2744a-0f8a-4553-90d3-9f2ac6681a4a",
+              "name": "lecture_number",
+              "value": "1/1",
+              "type": "string"
+            },
+            {
+              "id": "2235bdec-f28e-479d-a0b0-b458dcf5226a",
+              "name": "run_id",
+              "value": "46",
+              "type": "string"
+            },
+            {
+              "id": "84b68e2f-cec6-4993-b253-433226e1463c",
+              "name": "channel_id",
+              "value": "1555677249649377371",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        80
+      ],
+      "id": "3c56d55c-f266-42a9-afc1-19e7faa1c2b6",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst reviewRoot = '/mnt/s/Miscellaneous/Lecture-Notes';\n\nconst lectureId = data.lecture_number.replace('/', '-');\n\n// Course-specific Discord destinations\nconst discordConfig = {\n  mustalah: {\n    channel_id: '1555679268627808432',\n    webhook_url: 'https://discord.com/api/webhooks/REDACTED_ID/REDACTED_TOKEN',\n  },\n\n  fiqh: {\n    channel_id: '1296818122833264712',\n    webhook_url: 'https://discord.com/api/webhooks/REDACTED_ID/REDACTED_TOKEN',\n  },\n\n  aqeedah: {\n    channel_id: '1294304146052354100',\n    webhook_url: 'https://discord.com/api/webhooks/REDACTED_ID/REDACTED_TOKEN',\n  },\n\n  adaab: {\n    channel_id: '1555680319745695915',\n    webhook_url: 'https://discord.com/api/webhooks/REDACTED_ID/REDACTED_TOKEN',\n  },\n};\n\n// Used if the course is not listed above\nconst fallbackDiscord = {\n  channel_id: '999999999999999999',\n  webhook_url: 'https://discord.com/api/webhooks/REDACTED_ID/REDACTED_TOKEN',\n};\n\nconst courseKey = data.course.trim().toLowerCase();\n\nconst discord =\n  discordConfig[courseKey] ?? fallbackDiscord;\n\nconst finalNotesFile =\n  `${reviewRoot}/${courseKey}/lecture-${lectureId}-run-${data.run_id}.md`;\n\nreturn [{\n  json: {\n    ...data,\n\n    course: courseKey,\n    lecture_id: lectureId,\n    final_notes_file: finalNotesFile,\n\n    discord_channel_id: discord.channel_id,\n    discord_webhook_url: discord.webhook_url,\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        80
+      ],
+      "id": "4358ac14-419e-4fd4-a506-0ecc3b657380",
+      "name": "Config"
+    },
+    {
+      "parameters": {
+        "command": "=cat \"{{ $('Config').first().json.final_notes_file }}\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        672,
+        80
+      ],
+      "id": "db2165b8-409e-4323-87ba-46079df1f078",
+      "name": "Read Final Notes"
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $('Read Final Notes').first().json.stdout\n  .replace(/\\r\\n/g, '\\n')\n  .trim();\n\nconst MAX = 1900;\n\n// A heading is a standalone bold line like:\n// **Meaning and purpose of Mustalah al-Hadith**\nconst headingRegex = /^\\*\\*.+\\*\\*$/;\n\n// ----------\n// 1. Split the full document into heading sections\n// ----------\n\nconst lines = text.split('\\n');\nconst sections = [];\n\nlet current = [];\n\nfor (const line of lines) {\n  const isHeading = headingRegex.test(line.trim());\n\n  if (isHeading && current.length > 0) {\n    sections.push(current.join('\\n').trim());\n    current = [];\n  }\n\n  current.push(line);\n}\n\nif (current.length > 0) {\n  sections.push(current.join('\\n').trim());\n}\n\n// ----------\n// 2. Split an oversized section cleanly\n// ----------\n\nfunction splitOversizedSection(section) {\n  if (section.length <= MAX) {\n    return [section];\n  }\n\n  const sectionLines = section.split('\\n');\n\n  let heading = '';\n  let startIndex = 0;\n\n  if (headingRegex.test(sectionLines[0].trim())) {\n    heading = sectionLines[0];\n    startIndex = 1;\n  }\n\n  const points = [];\n  let point = [];\n\n  for (let i = startIndex; i < sectionLines.length; i++) {\n    const line = sectionLines[i];\n\n    const startsNewPoint =\n      /^-\\s/.test(line) ||\n      /^\\d+[.)]\\s/.test(line);\n\n    if (startsNewPoint && point.length > 0) {\n      points.push(point.join('\\n').trim());\n      point = [];\n    }\n\n    if (point.length > 0 || line.trim() !== '') {\n      point.push(line);\n    }\n  }\n\n  if (point.length > 0) {\n    points.push(point.join('\\n').trim());\n  }\n\n  const result = [];\n  let chunk = heading;\n\n  for (const p of points) {\n    const candidate = chunk\n      ? `${chunk}\\n\\n${p}`\n      : p;\n\n    if (candidate.length <= MAX) {\n      chunk = candidate;\n      continue;\n    }\n\n    if (chunk) {\n      result.push(chunk.trim());\n    }\n\n    if (p.length > MAX) {\n      const subchunks = splitLongPoint(p);\n      result.push(...subchunks);\n      chunk = '';\n    } else {\n      chunk = p;\n    }\n  }\n\n  if (chunk) {\n    result.push(chunk.trim());\n  }\n\n  return result;\n}\n\n// ----------\n// 3. Fallback for one unusually long point\n// ----------\n\nfunction splitLongPoint(point) {\n  if (point.length <= MAX) {\n    return [point];\n  }\n\n  // Prefer sentence boundaries\n  const sentences = point.match(/[^.!?]+[.!?]+(?:\\s|$)|[^.!?]+$/g) || [point];\n\n  const result = [];\n  let chunk = '';\n\n  for (const sentence of sentences) {\n    const clean = sentence.trim();\n\n    const candidate = chunk\n      ? `${chunk} ${clean}`\n      : clean;\n\n    if (candidate.length <= MAX) {\n      chunk = candidate;\n    } else {\n      if (chunk) {\n        result.push(chunk.trim());\n      }\n\n      // Absolute last resort\n      if (clean.length > MAX) {\n        for (let i = 0; i < clean.length; i += MAX) {\n          result.push(clean.slice(i, i + MAX));\n        }\n        chunk = '';\n      } else {\n        chunk = clean;\n      }\n    }\n  }\n\n  if (chunk) {\n    result.push(chunk.trim());\n  }\n\n  return result;\n}\n\n// ----------\n// 4. Produce final Discord messages\n// ----------\n\nconst chunks = [];\n\nfor (const section of sections) {\n  chunks.push(...splitOversizedSection(section));\n}\n\nreturn chunks.map((content, index) => ({\n  json: {\n    content,\n    part: index + 1,\n    total_parts: chunks.length,\n    length: content.length,\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        80
+      ],
+      "id": "b3fd8c6c-881b-4825-9ee6-ea75934bf1ef",
+      "name": "Split notes into messages"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        80
+      ],
+      "id": "ea7105e5-540c-4cbd-bc73-d2865ee8fb08",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.discord_webhook_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  content: $json.content\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "a40192c5-f029-449b-9b03-33c5bea07ccf",
+      "name": "Send to Discord"
+    },
+    {
+      "parameters": {
+        "amount": 1
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1568,
+        80
+      ],
+      "id": "6ece907c-0b1f-4a76-9508-9a89d1221480",
+      "name": "Wait 1 second",
+      "webhookId": "13e2a3e0-9233-4eca-ab5d-188d19205a73"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        272
+      ],
+      "id": "2c35d0e1-4000-4a17-b7c5-c6f514661983",
+      "name": "When Executed by Another Workflow"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Read Final Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Final Notes": {
+      "main": [
+        [
+          {
+            "node": "Split notes into messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split notes into messages": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Send to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Discord": {
+      "main": [
+        [
+          {
+            "node": "Wait 1 second",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 1 second": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "2c32cdf3-102c-4ea7-9af5-4bd8d8765dc5",
+  "meta": {
+    "instanceId": "beaf45199103b052a0dcb04006cb943d00057eec0d444a6fb82ebe059856f88d"
+  },
+  "nodeGroups": [],
+  "id": "Ts4FDXVYui2JxXjV",
+  "tags": []
+}
