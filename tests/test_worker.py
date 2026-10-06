@@ -10,9 +10,28 @@ import pytest_asyncio
 import notes_bot.worker as worker_module
 from notes_bot.db import Database
 from notes_bot.services import queue_generation, queue_index, queue_publication, retry_job
-from notes_bot.worker import Worker, api_post, process
+from notes_bot.worker import Worker, api_post, download_command, process, process_failure
 from tests.test_database import ready_course
 from tests.test_web import settings
+
+
+def test_download_uses_persistent_cookies_only_when_present(tmp_path):
+    config = replace(settings(), data_dir=tmp_path)
+    command = download_command(config, tmp_path, "dYpt1hHNJ3M")
+    assert "--cookies" not in command
+    cookies = tmp_path / "secrets" / "youtube-cookies.txt"
+    cookies.parent.mkdir()
+    cookies.write_text("private-session", encoding="utf-8")
+    command = download_command(config, tmp_path, "dYpt1hHNJ3M")
+    assert command[command.index("--cookies") + 1] == str(cookies)
+    assert "private-session" not in command
+
+
+def test_download_error_is_actionable_without_exposing_diagnostics():
+    error = process_failure(["yt-dlp"], 1, "SECRET Sign in to confirm you're not a bot https://private")
+    assert "Refresh" in str(error)
+    assert "SECRET" not in str(error)
+    assert "https://private" not in str(error)
 
 
 async def test_subprocess_progress_works_with_database_compatible_loop(tmp_path):

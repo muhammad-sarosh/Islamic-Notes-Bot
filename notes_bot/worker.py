@@ -18,7 +18,40 @@ from notes_bot.discord_api import DiscordAPI
 log = logging.getLogger(__name__)
 
 
+def download_command(settings, directory, video_id):
+    command = ["yt-dlp", "--ignore-config", "--no-playlist", "--no-progress"]
+    cookies = settings.data_dir / "secrets" / "youtube-cookies.txt"
+    if cookies.exists():
+        # Check readability before invoking yt-dlp; never log cookie contents.
+        with cookies.open("rb"):
+            pass
+        command.extend(["--cookies", str(cookies)])
+    command.extend([
+        "--max-filesize", "250M", "--match-filter",
+        f"duration <= {settings.max_audio_seconds}", "-f", "bestaudio/best",
+        "-o", str(directory / "source.%(ext)s"), "--",
+        f"https://www.youtube.com/watch?v={video_id}",
+    ])
+    return command
+
+
+def process_failure(command, code, diagnostics):
+    message = f"{Path(command[0]).name} exited with code {code}"
+    if Path(command[0]).name == "yt-dlp":
+        text = diagnostics.lower()
+        if "sign in to confirm" in text:
+            message += "; YouTube requires login verification. Refresh the worker's YouTube cookies"
+        elif "cookies are no longer valid" in text:
+            message += "; YouTube cookies expired. Export a fresh session"
+        elif "http error 403" in text:
+            message += "; YouTube denied audio access (HTTP 403)"
+        elif "video unavailable" in text or "private video" in text:
+            message += "; video is unavailable or private"
+    return RuntimeError(message)
+
+
 async def process(command, cwd, callback=None, timeout=7200):
+    diagnostics = ""
     if sys.platform == "win32":
         # PostgreSQL needs SelectorEventLoop on Windows, whose asyncio subprocess
         # API is unavailable. Drain a normal subprocess through executor threads.
@@ -35,6 +68,7 @@ async def process(command, cwd, callback=None, timeout=7200):
             try:
                 async with asyncio.timeout(timeout):
                     while line := await asyncio.to_thread(proc.stdout.readline):
+                        diagnostics = (diagnostics + line)[-16384:]
                         if callback:
                             try:
                                 event = json.loads(line)
@@ -44,7 +78,7 @@ async def process(command, cwd, callback=None, timeout=7200):
                                 await callback(event["progress"])
                     code = await asyncio.to_thread(proc.wait)
                     if code:
-                        raise RuntimeError(f"{Path(command[0]).name} exited with code {code}")
+                        raise process_failure(command, code, diagnostics)
             finally:
                 if proc.poll() is None:
                     proc.kill()
@@ -55,9 +89,10 @@ async def process(command, cwd, callback=None, timeout=7200):
     )
 
     async def stderr():
-        # Drain output without persisting command URLs, API keys, or full library diagnostics.
-        while await proc.stderr.read(65536):
-            pass
+        nonlocal diagnostics
+        # Keep a bounded tail in memory; expose only recognized, fixed error messages.
+        while chunk := await proc.stderr.read(65536):
+            diagnostics = (diagnostics + chunk.decode("utf-8", errors="replace"))[-16384:]
 
     drain = asyncio.create_task(stderr())
     try:
@@ -73,7 +108,7 @@ async def process(command, cwd, callback=None, timeout=7200):
             code = await proc.wait()
             await drain
             if code:
-                raise RuntimeError(f"{Path(command[0]).name} exited with code {code}")
+                raise process_failure(command, code, diagnostics)
     finally:
         if proc.returncode is None:
             proc.kill()
@@ -146,24 +181,8 @@ class Worker:
         if not book or not book["items"] or book["embedding_model"] != "intfloat/multilingual-e5-base":
             raise ValueError("Textbook index is unavailable or uses a different embedding model")
         await self.db.progress(job["id"], "Downloading YouTube audio")
-        url = f"https://www.youtube.com/watch?v={payload['video_id']}"
         await process(
-            [
-                "yt-dlp",
-                "--ignore-config",
-                "--no-playlist",
-                "--no-progress",
-                "--max-filesize",
-                "250M",
-                "--match-filter",
-                f"duration <= {s.max_audio_seconds}",
-                "-f",
-                "bestaudio/best",
-                "-o",
-                str(directory / "source.%(ext)s"),
-                "--",
-                url,
-            ],
+            download_command(s, directory, payload["video_id"]),
             directory,
         )
         sources = list(directory.glob("source.*"))
