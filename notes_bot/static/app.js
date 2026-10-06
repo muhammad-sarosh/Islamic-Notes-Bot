@@ -34,6 +34,42 @@ if (richHost && window.toastui?.Editor) {
   }, true);
 }
 editor?.addEventListener('input', () => { dirty = true; statusText.textContent = 'Unsaved changes'; });
+const notesForm = document.querySelector('#editor-form');
+const fullscreenButton = document.querySelector('#notes-fullscreen');
+function resizeNotes() {
+  const active = document.fullscreenElement === notesForm || notesForm?.classList.contains('notes-fullscreen');
+  if (!fullscreenButton) return;
+  fullscreenButton.textContent = active ? 'Exit fullscreen' : 'Fullscreen notes';
+  fullscreenButton.setAttribute('aria-pressed', String(active));
+  document.body.classList.toggle('notes-fullscreen-open', active);
+  if (richEditor) {
+    const available = window.innerHeight - (richHost.getBoundingClientRect().top - notesForm.getBoundingClientRect().top) - 65;
+    richEditor.setHeight(active ? `${Math.max(250, available)}px` : '700px');
+  }
+}
+fullscreenButton?.addEventListener('click', async () => {
+  if (document.fullscreenElement === notesForm) {
+    await document.exitFullscreen();
+  } else if (notesForm.classList.contains('notes-fullscreen')) {
+    notesForm.classList.remove('notes-fullscreen');
+  } else {
+    try {
+      if (!notesForm.requestFullscreen) throw new Error('Fullscreen unavailable');
+      await notesForm.requestFullscreen();
+    } catch {
+      notesForm.classList.add('notes-fullscreen');
+    }
+  }
+  resizeNotes();
+});
+document.addEventListener('fullscreenchange', resizeNotes);
+window.addEventListener('resize', resizeNotes);
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && notesForm?.classList.contains('notes-fullscreen')) {
+    notesForm.classList.remove('notes-fullscreen');
+    resizeNotes();
+  }
+});
 window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
 document.querySelector('#editor-form')?.addEventListener('submit', event => {
   if (richEditor && dirty) editor.value = richEditor.getMarkdown();
