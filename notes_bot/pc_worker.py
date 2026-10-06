@@ -42,6 +42,7 @@ class ModelProcess:
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 # Libraries emit diagnostics on stderr; no task text or credentials are printed.
                 stderr=None, text=True, encoding="utf-8", errors="replace",
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             )
         proc = self.process
