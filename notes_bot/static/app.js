@@ -36,39 +36,28 @@ if (richHost && window.toastui?.Editor) {
 editor?.addEventListener('input', () => { dirty = true; statusText.textContent = 'Unsaved changes'; });
 const notesForm = document.querySelector('#editor-form');
 const fullscreenButton = document.querySelector('#notes-fullscreen');
-function resizeNotes() {
-  const active = document.fullscreenElement === notesForm || notesForm?.classList.contains('notes-fullscreen');
-  if (!fullscreenButton) return;
-  fullscreenButton.textContent = active ? 'Exit fullscreen' : 'Fullscreen notes';
-  fullscreenButton.setAttribute('aria-pressed', String(active));
-  document.body.classList.toggle('notes-fullscreen-open', active);
-  if (richEditor) {
-    const available = window.innerHeight - (richHost.getBoundingClientRect().top - notesForm.getBoundingClientRect().top) - 65;
-    richEditor.setHeight(active ? `${Math.max(250, available)}px` : '700px');
-  }
-}
+const notesReading = document.querySelector('#notes-reading');
 fullscreenButton?.addEventListener('click', async () => {
-  if (document.fullscreenElement === notesForm) {
-    await document.exitFullscreen();
-  } else if (notesForm.classList.contains('notes-fullscreen')) {
-    notesForm.classList.remove('notes-fullscreen');
-  } else {
-    try {
-      if (!notesForm.requestFullscreen) throw new Error('Fullscreen unavailable');
-      await notesForm.requestFullscreen();
-    } catch {
-      notesForm.classList.add('notes-fullscreen');
-    }
+  fullscreenButton.disabled = true;
+  try {
+    const data = new FormData();
+    data.set('content', richEditor && dirty ? richEditor.getMarkdown() : editor.value);
+    data.set('csrf', notesForm.querySelector('input[name=csrf]').value);
+    const response = await fetch('/preview', {method: 'POST', body: data});
+    if (!response.ok || response.redirected) throw new Error('Unable to open notes. Sign in again or retry.');
+    notesReading.querySelector('article').innerHTML = await response.text();
+    notesReading.scrollTop = 0;
+    notesReading.showModal();
+    document.body.classList.add('notes-reading-open');
+  } catch (error) {
+    statusText.textContent = error.message;
+  } finally {
+    fullscreenButton.disabled = false;
   }
-  resizeNotes();
 });
-document.addEventListener('fullscreenchange', resizeNotes);
-window.addEventListener('resize', resizeNotes);
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && notesForm?.classList.contains('notes-fullscreen')) {
-    notesForm.classList.remove('notes-fullscreen');
-    resizeNotes();
-  }
+notesReading?.addEventListener('close', () => {
+  document.body.classList.remove('notes-reading-open');
+  fullscreenButton.focus();
 });
 window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
 document.querySelector('#editor-form')?.addEventListener('submit', event => {
