@@ -181,15 +181,16 @@ async def queue_publication(db, draft_id, expected_revision=None, mode="update")
             "AND payload->>'draft_id'=%s ORDER BY id DESC LIMIT 1", (str(draft_id),)
         )).fetchone()
         old_parts = []
+        chunks = split_messages(draft["content"])
         if mode == "update" and previous:
-            if previous["payload"]["revision"] == draft["revision"]:
-                return previous
             old_parts = await (await conn.execute(
                 "SELECT * FROM publication_parts WHERE job_id=%s AND action<>'delete' ORDER BY part",
                 (previous["id"],)
             )).fetchall()
             if any(p["state"] != "sent" or not p["message_id"] for p in old_parts):
                 raise ValueError("Previous message IDs are incomplete; send a new copy instead")
+            if previous["payload"]["revision"] == draft["revision"] and chunks == [p["content"] for p in old_parts]:
+                return previous
         channel = previous["payload"]["channel_id"] if old_parts else course["channel_id"]
         if not channel:
             raise ValueError("Configure the course's destination channel first")
@@ -200,7 +201,6 @@ async def queue_publication(db, draft_id, expected_revision=None, mode="update")
                 (course["id"], Jsonb(payload)),
             )
         ).fetchone()
-        chunks = split_messages(draft["content"])
         for i, part in enumerate(chunks):
             await conn.execute(
                 "INSERT INTO publication_parts(job_id,part,content,action,message_id) VALUES (%s,%s,%s,%s,%s)",

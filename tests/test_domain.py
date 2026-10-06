@@ -1,6 +1,13 @@
 import pytest
 
-from notes_bot.domain import lecture_number, split_messages, textbook_pages, utf16_length, video_id
+from notes_bot.domain import (
+    lecture_number,
+    split_long_point,
+    split_messages,
+    textbook_pages,
+    utf16_length,
+    video_id,
+)
 from notes_bot.ml import context_from_results
 
 
@@ -59,6 +66,23 @@ def test_discord_split_oversized_section_at_top_level_points():
     assert len(chunks) == 2
     assert "Nested point" in chunks[0]
     assert chunks[1].startswith("- b")
+
+
+def test_split_preserves_nested_bullets_in_oversized_section():
+    first = "2. **Both parties must consent.** A main point.\n  - If consent is absent.\n  - Another case."
+    text = "**Conditions**\n" + first + "\n3. " + "x" * 1850
+    parts = split_messages(text)
+    assert first in parts[0]
+    assert "point. - If" not in "".join(parts)
+
+
+def test_long_numbered_point_preserves_newlines_and_nested_indentation():
+    text = "2. **Consent.** " + "a" * 900 + ".\n  - " + "b" * 900 + ".\n  - " + "c" * 900 + "."
+    parts = split_long_point(text, 1900)
+    assert parts[0] == text.split("\n  - " + "c" * 900)[0]
+    assert parts[1].startswith("  - ")
+    assert all(utf16_length(part) <= 1900 for part in parts)
+    assert "".join("".join(parts).split()) == "".join(text.split())
 
 
 @pytest.mark.parametrize("heading", ["**Topic**", "## Topic"])

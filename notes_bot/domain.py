@@ -86,31 +86,30 @@ def split_messages(text, limit=1900):
 
 
 def split_long_point(point, limit):
-    result, chunk = [], ""
-    for sentence in re.split(r"(?<=[.!?])\s+", point):
-        clean = sentence.strip()
-        candidate = chunk + " " + clean if chunk else clean
-        if utf16_length(candidate) <= limit:
-            chunk = candidate
-            continue
-        if chunk:
-            result.append(chunk)
-        if utf16_length(clean) <= limit:
-            chunk = clean
-        else:
-            piece, size = "", 0
-            for char in clean:
-                width = utf16_length(char)
-                if size + width > limit:
-                    result.append(piece)
-                    piece, size = "", 0
-                piece += char
-                size += width
-            if piece:
-                result.append(piece)
-            chunk = ""
-    if chunk:
-        result.append(chunk)
+    """Split at existing line/sentence boundaries without flattening Markdown."""
+    result = []
+    while utf16_length(point) > limit:
+        size, end = 0, 0
+        for char in point:
+            width = utf16_length(char)
+            if size + width > limit:
+                break
+            size += width
+            end += 1
+        prefix = point[:end]
+        # Prefer whole Markdown lines, retaining indentation in the next part.
+        cut = prefix.rfind("\n") + 1
+        if not cut or not prefix[:cut].strip():
+            sentences = list(re.finditer(r"(?<=[.!?])[ \t]+", prefix))
+            cut = sentences[-1].end() if sentences else prefix.rfind(" ") + 1
+            if not cut or not prefix[:cut].strip():
+                cut = end
+        part = point[:cut].rstrip()
+        if part:
+            result.append(part)
+        point = point[cut:]
+    if point.strip():
+        result.append(point.rstrip())
     return result
 
 
