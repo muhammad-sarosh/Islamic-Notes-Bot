@@ -1,6 +1,8 @@
 {% extends "base.html" %}{% block content %}
 <p class="eyebrow">PROCESSING</p><h1>PC reranking worker</h1>
 <section class="panel"><h2>{{ 'Enabled' if enabled else 'Not enabled' }}</h2>
+<p><a class="button" href="/resources/pc-worker.ps1">Download PC worker script</a></p>
+<p>Save this script in the project’s scripts folder. It starts and manages the worker; the project, Python dependencies, and your private .env.pc configuration are also required.</p>
 <p>{{ 'PC worker connected recently' if online and enabled else 'No PC worker connected recently' }}. Reload this page to refresh.</p>
 <p>The PC handles BGE reranking when connected. If it is unavailable or its task claim expires, processing continues on the VPS. Completed transcript chunks are saved.</p>
 <p>The PC opens an outgoing HTTPS connection; it needs no public port or tunnel. Its model unloads after ten minutes idle. Pausing the PC worker lets future work use the VPS.</p>

@@ -214,6 +214,12 @@ def create_app(settings=None):
         return page(request, "pc_worker.html", enabled=bool(settings.pc_worker_token),
                     online=await remote.online())
 
+    @app.get("/resources/pc-worker.ps1")
+    async def download_pc_script(request: Request):
+        user(request)
+        return FileResponse(ROOT.parent / "scripts" / "pc-worker.ps1",
+                            media_type="application/octet-stream", filename="pc-worker.ps1")
+
     @app.get("/login")
     async def login(request: Request):
         return templates.TemplateResponse(request=request, name="login.html", context={})

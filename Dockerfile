@@ -3,6 +3,7 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 COPY pyproject.toml ./
 COPY notes_bot ./notes_bot
+COPY scripts ./scripts
 RUN pip install --no-cache-dir . && useradd --uid 10001 --create-home notes
 USER notes
 CMD ["uvicorn", "notes_bot.web:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 
 import discord
 from discord import app_commands
@@ -7,6 +8,14 @@ from discord import app_commands
 from notes_bot.services import queue_generation, queue_publication
 
 log = logging.getLogger(__name__)
+
+
+def lecture_title(content):
+    lines = [line.strip().strip("#* ") for line in (content or "").splitlines() if line.strip()]
+    if not lines:
+        return ""
+    first = re.sub(r"^Lecture\s+\d+\s*/\s*\d+\s*[:—–-]?\s*", "", lines[0], flags=re.I)
+    return (first.strip("* ") if first else next(iter(lines[1:]), ""))[:1000]
 
 
 def progress_embed(job, public_url):
@@ -22,6 +31,9 @@ def progress_embed(job, public_url):
     embed.add_field(name="Status", value=status.replace("_", " ").title())
     if job["payload"].get("lecture"):
         embed.add_field(name="Lecture", value=job["payload"]["lecture"])
+    title = lecture_title(job.get("draft_content"))
+    if title:
+        embed.add_field(name="Lecture title", value=title, inline=False)
     if job.get("error"):
         embed.add_field(name="Action needed", value=job["error"][:1000], inline=False)
     draft_id = job["payload"].get("draft_id", job["id"])
@@ -153,9 +165,11 @@ class NotesBot(discord.Client):
         while not self.is_closed():
             try:
                 rows = await self.db.all(
-                    "SELECT j.*,c.name AS course_name FROM jobs j JOIN courses c "
-                    "ON c.id=j.course_id WHERE progress_message_id IS NOT NULL AND "
-                    "(status IN ('queued','running') OR notified_status IS DISTINCT FROM status) ORDER BY j.id"
+                    "SELECT j.*,c.name AS course_name,d.content AS draft_content FROM jobs j JOIN courses c "
+                    "ON c.id=j.course_id LEFT JOIN drafts d ON d.id=CASE WHEN j.kind='publish' "
+                    "THEN (j.payload->>'draft_id')::bigint ELSE j.id END "
+                    "WHERE progress_message_id IS NOT NULL AND "
+                    "(j.status IN ('queued','running') OR notified_status IS DISTINCT FROM j.status) ORDER BY j.id"
                 )
                 for job in rows:
                     signature = (job["status"], job["stage"], job["error"])

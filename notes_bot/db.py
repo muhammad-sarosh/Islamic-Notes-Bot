@@ -40,7 +40,9 @@ class Database:
 
     async def job(self, job_id):
         return await self.one(
-            "SELECT j.*,c.name AS course_name FROM jobs j JOIN courses c ON c.id=j.course_id WHERE j.id=%s",
+            "SELECT j.*,c.name AS course_name,d.content AS draft_content FROM jobs j "
+            "JOIN courses c ON c.id=j.course_id LEFT JOIN drafts d ON d.id=CASE WHEN j.kind='publish' "
+            "THEN (j.payload->>'draft_id')::bigint ELSE j.id END WHERE j.id=%s",
             (job_id,),
         )
 
