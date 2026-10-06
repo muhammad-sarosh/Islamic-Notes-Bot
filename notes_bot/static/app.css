@@ -22,7 +22,7 @@ button:disabled { opacity: .6; cursor: wait; }
 .quiet:hover { background: #233d42; }
 .publish { background: var(--gold); color: #2b2519; }
 .publish:hover { background: #eed5a5; }
-:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+:focus, :focus-visible { outline: none; }
 .skip-link { position: fixed; top: -70px; left: 20px; z-index: 50; padding: 10px 20px; background: var(--text); color: var(--bg); }
 .skip-link:focus { top: 12px; }
 .site-rail { width: 238px; height: 100dvh; position: fixed; left: 0; top: 0; display: flex; flex-direction: column; background: #183e36; border-right: 1px solid #39544d; padding: 32px 20px 24px; }
@@ -145,6 +145,16 @@ details + details { border-top: 1px solid var(--border); }
 #notes-reading p { max-width: none; }
 #notes-reading article > :first-child { margin-top: 0; }
 body.notes-reading-open { overflow: hidden; }
+[data-job-href] { cursor: pointer; }
+[data-job-href]:hover { background: #244047; }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+nav a:focus-visible, button:focus-visible, .button:focus-visible { background: #31564a; color: var(--text); }
+#notes-reading #rich-editor { max-width: 90ch; margin: 0 auto; }
+#notes-reading .toastui-editor-defaultUI { border: 0 !important; border-radius: 0; }
+#notes-reading .toastui-editor-defaultUI-toolbar { display: none; }
+#notes-reading .toastui-editor-ww-container .ProseMirror { padding: 0 !important; }
+#notes-reading .toastui-editor-contents { font-size: 18px !important; }
+#notes-reading .toastui-editor-md-container { background: #122126; }
 @media(max-width:1150px) {
   .site-rail { width: 208px; padding-inline: 16px; }
   .brand { padding-inline: 10px; font-size: 23px; }

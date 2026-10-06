@@ -1,4 +1,11 @@
 document.querySelector('[data-back]')?.addEventListener('click', () => history.back());
+document.querySelectorAll('[data-job-href]').forEach(row => {
+  row.addEventListener('click', event => {
+    if (event.target.closest('a,button,input,select') || window.getSelection().toString()) return;
+    if (event.ctrlKey || event.metaKey) window.open(row.dataset.jobHref, '_blank', 'noopener');
+    else location.href = row.dataset.jobHref;
+  });
+});
 const editor = document.querySelector('#notes-editor');
 const statusText = document.querySelector('#editor-status');
 let dirty = false;
@@ -26,10 +33,12 @@ if (richHost && window.toastui?.Editor) {
   document.querySelectorAll('[data-editor-mode]').forEach(button => {
     button.addEventListener('click', () => mode(button.dataset.editorMode));
   });
-  document.querySelector('#editor-form').addEventListener('keydown', event => {
-    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v') {
+  document.addEventListener('keydown', event => {
+    if ((event.target.closest('#editor-form') || document.querySelector('#notes-reading')?.open) &&
+        (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v') {
       event.preventDefault(); event.stopPropagation();
       mode(richEditor.isMarkdownMode() ? 'wysiwyg' : 'markdown');
+      richEditor.focus();
     }
   }, true);
 }
@@ -37,9 +46,28 @@ editor?.addEventListener('input', () => { dirty = true; statusText.textContent =
 const notesForm = document.querySelector('#editor-form');
 const fullscreenButton = document.querySelector('#notes-fullscreen');
 const notesReading = document.querySelector('#notes-reading');
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && notesReading?.open) {
+    event.preventDefault();
+    event.stopPropagation();
+    notesReading.close();
+  }
+}, true);
+const editorHome = richHost?.parentNode;
+const editorNext = richHost?.nextSibling;
 fullscreenButton?.addEventListener('click', async () => {
   fullscreenButton.disabled = true;
   try {
+    if (richEditor) {
+      notesReading.querySelector('article').hidden = true;
+      notesReading.append(richHost);
+      notesReading.classList.add('editable-reading');
+      notesReading.showModal();
+      document.body.classList.add('notes-reading-open');
+      richEditor.setHeight('calc(100dvh - 64px)');
+      richEditor.focus();
+      return;
+    }
     const data = new FormData();
     data.set('content', richEditor && dirty ? richEditor.getMarkdown() : editor.value);
     data.set('csrf', notesForm.querySelector('input[name=csrf]').value);
@@ -56,6 +84,12 @@ fullscreenButton?.addEventListener('click', async () => {
   }
 });
 notesReading?.addEventListener('close', () => {
+  if (richEditor && richHost.parentNode === notesReading) {
+    editorHome.insertBefore(richHost, editorNext);
+    richEditor.setHeight('700px');
+    notesReading.classList.remove('editable-reading');
+    notesReading.querySelector('article').hidden = false;
+  }
   document.body.classList.remove('notes-reading-open');
   fullscreenButton.focus();
 });
