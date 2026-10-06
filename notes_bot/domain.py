@@ -105,7 +105,7 @@ def split_long_point(point, limit):
             cut = sentences[-1].end() if sentences else prefix.rfind(" ") + 1
             if not cut or not prefix[:cut].strip():
                 cut = end
-        part = point[:cut].rstrip()
+        part = point[:cut].rstrip("\r\n")
         if part:
             result.append(part)
         point = point[cut:]
