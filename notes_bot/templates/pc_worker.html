@@ -1,5 +1,5 @@
-{% extends "base.html" %}{% block content %}
-<p class="eyebrow">PROCESSING</p><h1>PC reranking worker</h1>
+{% extends "base.html" %}{% block title %}PC worker · Lecture Notes{% endblock %}{% block content %}
+<h1>PC reranking worker</h1>
 <section class="panel"><h2>{{ 'Enabled' if enabled else 'Not enabled' }}</h2>
 <p><a class="button" href="/resources/pc-worker.ps1">Download PC worker script</a></p>
 <p>Save this script in the project’s scripts folder. It starts and manages the worker; the project, Python dependencies, and your private .env.pc configuration are also required.</p>

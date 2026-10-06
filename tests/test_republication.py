@@ -118,8 +118,8 @@ async def test_jobs_filters_search_pagination_and_stop_paused_update(published):
             client.cookies.set('notes_session', cookie, domain='notes.test', path='/')
             response = await client.get('/?q=Fiqh&kind=publish&status=published&course=1')
             assert response.status_code == 200
-            assert '1 matching jobs' in response.text and 'publish · 1/7' in response.text
-            assert 'generate ·' not in response.text
+            assert '1 matching jobs' in response.text and 'Publication' in response.text and '1/7' in response.text
+            assert 'Lecture notes' not in response.text
             assert '0 matching jobs' in (await client.get('/?q=not%20present')).text
             assert '2 matching jobs' in (await client.get('/?q=Second')).text
             await db.execute("INSERT INTO jobs(kind,course_id,payload,status) "

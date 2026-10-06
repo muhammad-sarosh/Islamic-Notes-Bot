@@ -4,8 +4,18 @@
 <link rel="icon" href="/static/favicon.ico" sizes="16x16 32x32 48x48 64x64">
 <link rel="icon" type="image/png" href="/static/favicon.png" sizes="64x64">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-{% block assets %}{% endblock %}
-<script src="/static/app.js" defer></script></head><body>
-<header><a class="brand" href="/">Lecture <span>Notes</span></a><nav><a href="/">Jobs</a><a href="/courses">Courses</a><a href="/rules">Rules</a><a href="/pc-worker">PC worker</a></nav>
-{% if user %}<form action="/logout" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="quiet">Sign out · {{ user.name }}</button></form>{% endif %}</header>
-<main>{% block content %}{% endblock %}</main></body></html>
+{% block assets %}{% endblock %}<script src="/static/app.js" defer></script></head>
+<body class="{{ 'signed-in' if user else 'signed-out' }}">
+<a class="skip-link" href="#main-content">Skip to content</a>
+<header class="site-rail">
+<a class="brand" href="/"><img src="/static/apple-touch-icon.png" alt="" width="56" height="56"><span>Lecture Notes</span></a>
+{% if user %}
+{% set path = request.url.path if request is defined else '' %}
+<nav aria-label="Main navigation">
+{% for href,label,icon in [('/', 'Jobs', 'M4 5h16M4 12h16M4 19h10'),('/courses','Courses','M12 5v15M12 5C9 3 5 3 3 4v15c3-1 6-1 9 1 3-2 6-2 9-1V4c-2-1-6-1-9 1'),('/rules','Rules','M5 4h14v16H5zM8 8h8M8 12h8M8 16h5'),('/pc-worker','PC worker','M3 4h18v13H3zM8 21h8M12 17v4')] %}
+{% set active = (href=='/' and (path=='/' or path.startswith('/jobs/'))) or (href!='/' and path.startswith(href)) %}
+<a href="{{ href }}" {{ 'aria-current=page' if active else '' }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{ icon }}"/></svg>{{ label }}</a>
+{% endfor %}</nav>
+<div class="rail-account"><span class="account-avatar" aria-hidden="true">{{ user.name[:1]|upper }}</span><span class="account-name">{{ user.name }}</span><form action="/logout" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="quiet">Sign out</button></form></div>
+{% endif %}</header>
+<main id="main-content" tabindex="-1">{% block content %}{% endblock %}</main></body></html>
