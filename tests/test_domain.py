@@ -76,6 +76,15 @@ def test_split_preserves_nested_bullets_in_oversized_section():
     assert "point. - If" not in "".join(parts)
 
 
+@pytest.mark.parametrize("size", [10, 800])
+def test_discord_points_have_single_line_breaks(size):
+    text = "**Topic**\n- " + "a" * size + "\n\n  - Nested.\n\n- " + "b" * size + "\n- " + "c" * size
+    parts = split_messages(text)
+    assert all("\n\n- " not in part and "\n\n  - " not in part for part in parts)
+    assert "\n  - Nested." in parts[0]
+    assert "".join("".join(parts).split()) == "".join(text.split())
+
+
 def test_long_numbered_point_preserves_newlines_and_nested_indentation():
     text = "2. **Consent.** " + "a" * 900 + ".\n  - " + "b" * 900 + ".\n  - " + "c" * 900 + "."
     parts = split_long_point(text, 1900)

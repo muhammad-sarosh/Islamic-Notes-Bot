@@ -40,7 +40,6 @@ def progress_embed(job, public_url):
     embed.add_field(
         name="Review and details", value=f"[Open webpage]({public_url}/jobs/{draft_id})", inline=False
     )
-    embed.set_footer(text="Textbook references support the lecture. Review notes before publishing.")
     return embed
 
 
