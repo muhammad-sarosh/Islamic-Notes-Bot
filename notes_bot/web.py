@@ -18,6 +18,7 @@ from notes_bot.bot import NotesBot
 from notes_bot.config import Settings
 from notes_bot.db import Database
 from notes_bot.discord_api import DiscordAPI
+from notes_bot.remote_rerank import RemoteRerank
 from notes_bot.services import (
     create_course,
     queue_index,
@@ -65,6 +66,7 @@ def create_app(settings=None):
     db = Database(settings.database_url)
     api = DiscordAPI(settings.discord_token)
     bot = NotesBot(settings, db)
+    remote = RemoteRerank(db)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -158,6 +160,58 @@ def create_app(settings=None):
         if task is None or task.done() or not bot.is_ready():
             raise HTTPException(503, "Discord connection is not ready")
         return {"status": "ok"}
+
+    def pc_auth(request):
+        expected = settings.pc_worker_token
+        supplied = request.headers.get("authorization", "")
+        if not expected or not secrets.compare_digest(supplied, "Bearer " + expected):
+            # Never redirect machine clients into OAuth login.
+            raise HTTPException(403, "Invalid PC worker credential")
+
+    async def pc_claim_data(request):
+        pc_auth(request)
+        data = await request.json()
+        if not isinstance(data, dict) or not isinstance(data.get("claim"), str):
+            raise ValueError("Invalid claim")
+        return int(data["job_id"]), int(data["chunk"]), data["claim"], data
+
+    @app.get("/api/pc-worker/claim")
+    async def pc_claim(request: Request):
+        pc_auth(request)
+        for _ in range(13):
+            task = await remote.claim()
+            if task:
+                return task
+            if await request.is_disconnected():
+                break
+            await asyncio.sleep(2)
+        return {"task": None}
+
+    @app.post("/api/pc-worker/heartbeat")
+    async def pc_heartbeat(request: Request):
+        job_id, chunk, claim, _ = await pc_claim_data(request)
+        if not await remote.renew(job_id, chunk, claim):
+            raise HTTPException(409, "Task claim expired")
+        return {"ok": True}
+
+    @app.post("/api/pc-worker/result")
+    async def pc_result(request: Request):
+        job_id, chunk, claim, data = await pc_claim_data(request)
+        if not await remote.complete(job_id, chunk, claim, data.get("scores")):
+            raise HTTPException(409, "Task claim expired")
+        return {"ok": True}
+
+    @app.post("/api/pc-worker/fail")
+    async def pc_fail(request: Request):
+        job_id, chunk, claim, _ = await pc_claim_data(request)
+        await remote.fail(job_id, chunk, claim)
+        return {"ok": True}
+
+    @app.get("/pc-worker")
+    async def pc_worker_page(request: Request):
+        user(request)
+        return page(request, "pc_worker.html", enabled=bool(settings.pc_worker_token),
+                    online=await remote.online())
 
     @app.get("/login")
     async def login(request: Request):

@@ -14,6 +14,9 @@ from psycopg.types.json import Jsonb
 from notes_bot.config import Settings
 from notes_bot.db import Database
 from notes_bot.discord_api import DiscordAPI
+from notes_bot.ml import context_from_results
+from notes_bot.remote_rerank import RemoteRerank
+from notes_bot.reranking import rank_candidates, validate_scores
 
 log = logging.getLogger(__name__)
 
@@ -144,15 +147,44 @@ class Worker:
         self.db = db
         self.discord = DiscordAPI(settings.discord_token)
 
-    async def ml(self, job, directory, mode, data):
+    async def ml(self, job, directory, mode, data, callback=None):
         input_path, output_path = directory / f"{mode}-in.json", directory / f"{mode}-out.json"
         input_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         await process(
             [sys.executable, "-m", "notes_bot.ml", mode, str(input_path), str(output_path)],
             Path.cwd(),
-            lambda stage: self.db.progress(job["id"], stage),
+            callback or (lambda stage: self.db.progress(job["id"], stage)),
         )
         return json.loads(output_path.read_text(encoding="utf-8"))
+
+    async def rerank(self, job, directory, data):
+        if not self.settings.pc_worker_token:
+            return await self.ml(job, directory, "rerank", data)
+        remote = RemoteRerank(self.db)
+        await remote.prepare(job["id"], data)
+        rows = await remote.wait_or_fallback(job["id"])
+        if all(row["state"] == "completed" for row in rows):
+            return context_from_results(data["chunks"], [
+                rank_candidates(candidates, row["scores"])
+                for candidates, row in zip(data["candidates"], rows, strict=True)
+            ])
+        checkpoint = directory / "rerank-scores.json"
+        scores = [row["scores"] for row in rows]
+        checkpoint.write_text(json.dumps(scores), encoding="utf-8")
+
+        async def local_progress(stage):
+            if checkpoint.exists():
+                completed = json.loads(checkpoint.read_text(encoding="utf-8"))
+                for i, value in enumerate(completed, 1):
+                    if value is not None and scores[i - 1] is None:
+                        validate_scores(value, len(data["candidates"][i - 1]))
+                        await remote.save_local(job["id"], i, value)
+                        scores[i - 1] = value
+            await self.db.progress(job["id"], "VPS fallback — " + stage)
+
+        return await self.ml(job, directory, "rerank", {
+            **data, "scores": scores, "checkpoint": str(checkpoint)
+        }, callback=local_progress)
 
     async def index(self, job, directory):
         book_id = job["payload"]["book_id"]
@@ -245,7 +277,7 @@ class Worker:
             candidates = await self.ml(
                 job, directory, "candidates", {"transcript": transcript, "items": book["items"]}
             )
-            context = await self.ml(job, directory, "rerank", candidates)
+            context = await self.rerank(job, directory, candidates)
             rules = {r["scope"]: r["content"] for r in payload["rules"]}
             instructions = "\n\n".join(
                 rules.get(scope, "") for scope in ["shared", f"course:{job['course_id']}", "format"]

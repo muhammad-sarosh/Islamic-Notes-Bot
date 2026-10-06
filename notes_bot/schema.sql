@@ -71,3 +71,20 @@ CREATE TABLE IF NOT EXISTS publication_parts (
     message_id text,
     PRIMARY KEY(job_id,part)
 );
+
+CREATE TABLE IF NOT EXISTS pc_worker_presence (
+    id integer PRIMARY KEY CHECK (id=1),
+    seen_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS rerank_tasks (
+    job_id bigint NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    chunk integer NOT NULL,
+    fingerprint text NOT NULL,
+    input jsonb NOT NULL,
+    state text NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','remote','local','completed')),
+    claim text,
+    claimed_at timestamptz,
+    lease_until timestamptz,
+    scores jsonb,
+    PRIMARY KEY(job_id,chunk)
+);

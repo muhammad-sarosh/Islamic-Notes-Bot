@@ -22,6 +22,7 @@ class Settings:
     max_audio_seconds: int = 14400
     llm_context_chars: int = 500000
     development: bool = False
+    pc_worker_token: str = ""
 
     @classmethod
     def from_env(cls):
@@ -52,6 +53,9 @@ class Settings:
         if len(secret) < 32:
             raise ValueError("SESSION_SECRET must contain at least 32 characters")
         users = frozenset(int(x.strip()) for x in required("ALLOWED_USER_IDS").split(","))
+        pc_token = os.environ.get("PC_WORKER_TOKEN", "").strip()
+        if pc_token and len(pc_token) < 32:
+            raise ValueError("PC_WORKER_TOKEN must contain at least 32 characters")
         return cls(
             database_url=required("DATABASE_URL"),
             public_url=url,
@@ -69,4 +73,5 @@ class Settings:
             max_audio_seconds=int(os.environ.get("MAX_AUDIO_SECONDS", "14400")),
             llm_context_chars=int(os.environ.get("LLM_CONTEXT_CHARS", "500000")),
             development=development,
+            pc_worker_token=pc_token,
         )

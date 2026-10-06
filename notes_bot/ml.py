@@ -6,6 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from notes_bot.domain import textbook_pages
+from notes_bot.reranking import BGERanker, rank_candidates
 
 E5_MODEL = "intfloat/multilingual-e5-base"
 BGE_MODEL = "BAAI/bge-reranker-v2-m3"
@@ -121,26 +122,22 @@ def main():
                 report(f"E5 retrieval — {i}/{len(chunks)} transcript chunks")
             result = {"chunks": chunks, "candidates": candidates}
     elif mode == "rerank":
-        from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
         report("Loading BGE reranker")
-        tokenizer = AutoTokenizer.from_pretrained(BGE_MODEL)
-        model = AutoModelForSequenceClassification.from_pretrained(BGE_MODEL).eval()
+        model = None
+        saved = data.get("scores", [None] * len(data["chunks"]))
         results = []
         for i, (chunk, row) in enumerate(zip(data["chunks"], data["candidates"], strict=True), 1):
-            scores = []
-            for start in range(0, len(row), 2):
-                pairs = [[chunk, x["text"]] for x in row[start : start + 2]]
-                inputs = tokenizer(pairs, padding=True, truncation=True, max_length=512, return_tensors="pt")
-                with torch.inference_mode():
-                    scores.extend(model(**inputs).logits.reshape(-1).tolist())
-            ranked = sorted(zip(row, scores, strict=True), key=lambda x: x[1], reverse=True)
-            results.append(
-                [
-                    {**item, "bge_rank": rank, "bge_score": float(score)}
-                    for rank, (item, score) in enumerate(ranked[:15], 1)
-                ]
-            )
+            scores = saved[i - 1]
+            if scores is None:
+                model = model or BGERanker()
+                scores = model.score(chunk, [x["text"] for x in row])
+                saved[i - 1] = scores
+                if data.get("checkpoint"):
+                    checkpoint = Path(data["checkpoint"])
+                    temporary = checkpoint.with_suffix(".tmp")
+                    temporary.write_text(json.dumps(saved), encoding="utf-8")
+                    temporary.replace(checkpoint)
+            results.append(rank_candidates(row, scores))
             report(f"BGE reranking — {i}/{len(data['chunks'])} transcript chunks")
         result = context_from_results(data["chunks"], results)
     else:

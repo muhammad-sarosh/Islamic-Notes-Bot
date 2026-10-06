@@ -69,4 +69,6 @@ Database tests require `TEST_DATABASE_URL` pointing to a **disposable** PostgreS
 
 ## Generation constraints
 
+For GPU reranking on a Windows PC with automatic VPS fallback, see [PC_WORKER_SETUP.md](PC_WORKER_SETUP.md).
+
 Transcription uses 10-minute audio chunks to stay below Groq's free upload size limit. Quota exhaustion fails the job with an explicit retry path instead of switching to paid services. The worker retains completed transcription chunks after failure. The current generation step sends the full retrieval context in one request and rejects visibly truncated outputs. `LLM_CONTEXT_CHARS` is a conservative character guard, not a tokenizer-based guarantee; configure it for the selected 9router model. Lectures exceeding that budget stop instead of silently losing transcript content. A future hierarchical generation strategy can handle longer lectures if needed.

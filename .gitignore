@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.pc.example
 *.pem
 *.key
 
@@ -9,6 +10,7 @@
 __pycache__/
 *.py[cod]
 .venv/
+.venv-pc/
 venv/
 .pytest_cache/
 .mypy_cache/
