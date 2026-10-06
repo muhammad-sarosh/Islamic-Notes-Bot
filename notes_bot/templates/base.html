@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{% block title %}Lecture Notes{% endblock %}</title><link rel="stylesheet" href="/static/app.css">
+<title>{% block title %}Lecture Notes{% endblock %}</title><link rel="stylesheet" href="/static/app.css?v={{ asset_versions['app.css'] }}">
 <link rel="icon" href="/static/favicon.ico" sizes="16x16 32x32 48x48 64x64">
 <link rel="icon" type="image/png" href="/static/favicon.png" sizes="64x64">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-{% block assets %}{% endblock %}<script src="/static/app.js" defer></script></head>
+{% block assets %}{% endblock %}<script src="/static/app.js?v={{ asset_versions['app.js'] }}" defer></script></head>
 <body class="{{ 'signed-in' if user else 'signed-out' }}">
 <a class="skip-link" href="#main-content">Skip to content</a>
 <header class="site-rail">

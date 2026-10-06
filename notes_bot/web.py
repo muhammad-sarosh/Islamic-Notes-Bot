@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 import secrets
 from contextlib import asynccontextmanager
@@ -31,6 +32,10 @@ from notes_bot.services import (
 
 ROOT = Path(__file__).parent
 templates = Jinja2Templates(directory=ROOT / "templates")
+templates.env.globals["asset_versions"] = {
+    name: hashlib.sha256((ROOT / "static" / name).read_bytes()).hexdigest()[:16]
+    for name in ("app.css", "app.js")
+}
 log = logging.getLogger(__name__)
 
 
