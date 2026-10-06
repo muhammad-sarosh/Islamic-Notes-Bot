@@ -337,14 +337,21 @@ class Worker:
         for i, part in enumerate(parts, 1):
             if part["state"] == "sent":
                 continue
-            if part["state"] != "pending":
+            action = part.get("action", "send")
+            if part["state"] != "pending" and action == "send":
                 raise ValueError("A message has an uncertain delivery state. Reconcile it in the review page")
             await self.db.progress(job["id"], f"Publishing — {i}/{len(parts)} messages")
             await self.db.execute(
                 "UPDATE publication_parts SET state='sending' WHERE job_id=%s AND part=%s",
                 (job["id"], part["part"]),
             )
-            message = await self.discord.send(channel, part["content"], f"{job['id']}-{part['part']}")
+            if action == "edit":
+                message = await self.discord.edit(channel, part["message_id"], part["content"])
+            elif action == "delete":
+                await self.discord.delete(channel, part["message_id"])
+                message = {"id": part["message_id"]}
+            else:
+                message = await self.discord.send(channel, part["content"], f"{job['id']}-{part['part']}")
             await self.db.execute(
                 "UPDATE publication_parts SET state='sent',message_id=%s WHERE job_id=%s AND part=%s",
                 (message["id"], job["id"], part["part"]),

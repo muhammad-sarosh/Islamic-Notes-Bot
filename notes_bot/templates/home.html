@@ -1,6 +1,13 @@
 {% extends "base.html" %}{% block content %}
 <div class="heading"><div><p class="eyebrow">WORKSPACE</p><h1>Lecture jobs</h1><p class="muted">Create a draft in Discord with <code>/createnotes</code>, then review it here.</p></div><a class="button quiet" href="/courses">Manage courses</a></div>
+<form class="panel job-filters" method="get" action="/">
+<label>Search<input type="search" name="q" value="{{ filters.q }}" maxlength="200" placeholder="Lecture, course, job ID or notes text"></label>
+<label>Course<select name="course"><option value="">All courses</option>{% for course in courses %}<option value="{{ course.id }}" {{ 'selected' if filters.course==course.id|string else '' }}>{{ course.name }}</option>{% endfor %}</select></label>
+<label>Task<select name="kind"><option value="">All tasks</option>{% for kind in ['generate','index','publish'] %}<option {{ 'selected' if filters.kind==kind else '' }} value="{{ kind }}">{{ kind|title }}</option>{% endfor %}</select></label>
+<label>Status<select name="status"><option value="">All statuses</option>{% for status in ['queued','running','ready','published','completed','failed','needs_attention','cancelled'] %}<option {{ 'selected' if filters.status==status else '' }} value="{{ status }}">{{ status|replace('_',' ')|title }}</option>{% endfor %}</select></label>
+<div class="actions"><button>Apply filters</button><a href="/">Clear</a></div></form>
+<p class="muted">{{ total }} matching jobs · Page {{ page_number }}</p>
 <section class="panel table-wrap"><table><thead><tr><th>Job</th><th>Course</th><th>Task</th><th>Status</th><th>Progress</th></tr></thead><tbody>
-{% for job in jobs %}<tr><td><a href="/jobs/{{ job.id }}">#{{ job.id }}</a></td><td>{{ job.course_name }}</td><td>{{ job.kind }}{% if job.payload.lecture %} · {{ job.payload.lecture }}{% endif %}</td><td><span class="badge {{ job.status }}">{{ job.status|replace('_',' ') }}</span></td><td>{{ job.stage }}</td></tr>
-{% else %}<tr><td colspan="5">No jobs yet. Add a course and textbook, then use <code>/createnotes</code> in Discord.</td></tr>{% endfor %}
-</tbody></table></section>{% endblock %}
+{% for job in jobs %}<tr><td><a href="/jobs/{{ job.id }}">#{{ job.id }}</a></td><td>{{ job.course_name }}</td><td>{{ job.kind }}{% if job.lecture %} · {{ job.lecture }}{% endif %}</td><td><span class="badge {{ job.status }}">{{ job.status|replace('_',' ') }}</span></td><td>{{ job.stage }}</td></tr>
+{% else %}<tr><td colspan="5">No matching jobs. Clear or change the filters, or create a lecture in Discord.</td></tr>{% endfor %}
+</tbody></table></section><div class="actions">{% if previous %}<a class="button quiet" href="{{ previous }}">Previous</a>{% endif %}{% if following %}<a class="button quiet" href="{{ following }}">Next</a>{% endif %}</div>{% endblock %}

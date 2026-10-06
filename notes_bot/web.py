@@ -273,11 +273,37 @@ def create_app(settings=None):
     @app.get("/", response_class=HTMLResponse)
     async def home(request: Request):
         user(request)
+        q = request.query_params.get("q", "").strip()[:200]
+        course = request.query_params.get("course", "")
+        kind = request.query_params.get("kind", "")
+        status = request.query_params.get("status", "")
+        page_number = max(1, min(1000000, int(request.query_params.get("page", "1"))))
+        clauses, params = [], []
+        for column, value in [("j.course_id", course), ("j.kind", kind), ("j.status", status)]:
+            if value:
+                clauses.append(column + "=%s")
+                params.append(int(value) if column == "j.course_id" else value)
+        if q:
+            clauses.append("concat_ws(' ',j.id::text,c.name,c.slug,j.stage,"
+                           "coalesce(j.payload->>'lecture',g.payload->>'lecture'),d.content) ILIKE %s")
+            params.append("%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
+        query = ("FROM jobs j JOIN courses c ON c.id=j.course_id "
+                 "LEFT JOIN jobs g ON g.id=CASE WHEN j.kind='publish' "
+                 "THEN (j.payload->>'draft_id')::bigint ELSE j.id END "
+                 "LEFT JOIN drafts d ON d.id=g.id ")
+        where = "WHERE " + " AND ".join(clauses) if clauses else ""
+        total = (await db.one("SELECT count(*) AS count " + query + where, params))["count"]
         jobs = await db.all(
-            "SELECT j.*,c.name AS course_name FROM jobs j JOIN courses c ON c.id=j.course_id "
-            "ORDER BY j.id DESC LIMIT 100"
+            "SELECT j.*,c.name AS course_name,g.payload->>'lecture' AS lecture " + query + where +
+            " ORDER BY j.id DESC LIMIT 50 OFFSET %s", [*params, (page_number - 1) * 50]
         )
-        return page(request, "home.html", jobs=jobs)
+        courses = await db.all("SELECT id,name FROM courses ORDER BY name")
+        filters = {"q": q, "course": course, "kind": kind, "status": status}
+        def link(number):
+            return "/?" + urlencode({**filters, "page": number})
+        return page(request, "home.html", jobs=jobs, courses=courses, filters=filters, total=total,
+                    page_number=page_number, previous=link(page_number-1) if page_number>1 else None,
+                    following=link(page_number+1) if page_number*50<total else None)
 
     @app.get("/resources/clean-pdf-text.zip")
     async def download_pdf_skill(request: Request):
@@ -414,7 +440,8 @@ def create_app(settings=None):
         draft = await db.one("SELECT * FROM drafts WHERE id=%s", (job_id,))
         publication = (
             await db.one(
-                "SELECT * FROM jobs WHERE kind='publish' AND payload->>'draft_id'=%s", (str(job_id),)
+                "SELECT * FROM jobs WHERE kind='publish' AND payload->>'draft_id'=%s "
+                "ORDER BY id DESC LIMIT 1", (str(job_id),)
             )
             if draft
             else None
@@ -439,6 +466,9 @@ def create_app(settings=None):
             publication=publication,
             revisions=revisions,
             parts=parts,
+            locked=bool(publication and publication["status"] in {"queued", "running", "needs_attention"}),
+            publications=await db.all("SELECT id,status,payload,created_at FROM jobs WHERE kind='publish' "
+                                      "AND payload->>'draft_id'=%s ORDER BY id DESC", (str(job_id),)),
             preview=render_markdown(draft["content"]) if draft else "",
         )
 
@@ -461,7 +491,7 @@ def create_app(settings=None):
         data = await form(request)
         # Publishing accepts the reviewed editor content and its optimistic revision.
         revision = await save_draft(db, job_id, data["content"], int(data["revision"]), user(request)["id"])
-        await queue_publication(db, job_id, revision)
+        await queue_publication(db, job_id, revision, data.get("mode", "update"))
         return RedirectResponse(f"/jobs/{job_id}", status_code=303)
 
     @app.post("/jobs/{job_id}/retry")
@@ -509,6 +539,7 @@ def create_app(settings=None):
             or job["status"] != "needs_attention"
             or not row
             or row["state"] != "sending"
+            or row["action"] != "send"
         ):
             raise ValueError("This message is not awaiting reconciliation")
         message_id = data.get("message_id", "").strip()
@@ -542,6 +573,8 @@ def create_app(settings=None):
             ).fetchone()
             if not job or job["kind"] != "publish" or job["status"] != "needs_attention":
                 raise ValueError("Publication is not paused")
+            await conn.execute("UPDATE publication_parts SET state='pending' WHERE job_id=%s "
+                               "AND state='sending' AND action IN ('edit','delete')", (job_id,))
             uncertain = await (
                 await conn.execute(
                     "SELECT part FROM publication_parts WHERE job_id=%s AND state='sending'", (job_id,)
@@ -554,6 +587,16 @@ def create_app(settings=None):
                 "WHERE id=%s",
                 (job_id,),
             )
+        return RedirectResponse(f"/jobs/{job['payload']['draft_id']}", status_code=303)
+
+    @app.post("/publications/{job_id}/stop")
+    async def stop_publication(request: Request, job_id: int):
+        await form(request)
+        job = await db.one("UPDATE jobs SET status='cancelled',stage='Stopped; check partially changed messages', "
+                           "updated_at=now() WHERE id=%s AND kind='publish' AND status='needs_attention' "
+                           "RETURNING payload", (job_id,))
+        if not job:
+            raise ValueError("Only a paused publication can be stopped")
         return RedirectResponse(f"/jobs/{job['payload']['draft_id']}", status_code=303)
 
     return app

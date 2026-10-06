@@ -2,9 +2,41 @@ document.querySelector('[data-back]')?.addEventListener('click', () => history.b
 const editor = document.querySelector('#notes-editor');
 const statusText = document.querySelector('#editor-status');
 let dirty = false;
+let richEditor;
+const richHost = document.querySelector('#rich-editor');
+if (richHost && window.toastui?.Editor) {
+  const original = editor.value;
+  let ready = false;
+  richEditor = new toastui.Editor({
+    el: richHost, height: '700px', initialEditType: 'wysiwyg', previewStyle: 'tab',
+    initialValue: original, theme: 'dark', hideModeSwitch: true, usageStatistics: false,
+    customHTMLSanitizer: html => DOMPurify.sanitize(html),
+    events: { change: () => { if (ready) { dirty = true; statusText.textContent = 'Unsaved changes'; } } }
+  });
+  document.querySelector('#source-fallback').hidden = true;
+  ready = true;
+  function mode(type) {
+    ready = false;
+    richEditor.changeMode(type);
+    document.querySelectorAll('[data-editor-mode]').forEach(button => {
+      button.setAttribute('aria-pressed', String(button.dataset.editorMode === type));
+    });
+    ready = true;
+  }
+  document.querySelectorAll('[data-editor-mode]').forEach(button => {
+    button.addEventListener('click', () => mode(button.dataset.editorMode));
+  });
+  document.querySelector('#editor-form').addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v') {
+      event.preventDefault(); event.stopPropagation();
+      mode(richEditor.isMarkdownMode() ? 'wysiwyg' : 'markdown');
+    }
+  }, true);
+}
 editor?.addEventListener('input', () => { dirty = true; statusText.textContent = 'Unsaved changes'; });
 window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
 document.querySelector('#editor-form')?.addEventListener('submit', event => {
+  if (richEditor && dirty) editor.value = richEditor.getMarkdown();
   if (event.submitter?.hasAttribute('data-publish') && !confirm('Publish these notes to the configured course channel?')) {
     event.preventDefault(); return;
   }

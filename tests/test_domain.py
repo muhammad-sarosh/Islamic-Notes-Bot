@@ -43,8 +43,22 @@ def test_lecture_normalization():
 )
 def test_discord_split_preserves_all_content_and_size(text):
     chunks = split_messages(text)
-    assert "".join(chunks) == text
+    assert "".join("".join(chunks).split()) == "".join(text.split())
     assert all(0 < utf16_length(part) <= 1900 for part in chunks)
+
+
+def test_discord_split_keeps_small_heading_sections_separate():
+    assert split_messages("Title\n\n**First**\n- One\n\n**Second**\n- Two") == [
+        "Title", "**First**\n- One", "**Second**\n- Two"
+    ]
+
+
+def test_discord_split_oversized_section_at_top_level_points():
+    text = "**Topic**\n- " + "a" * 1000 + "\n  - Nested point\n- " + "b" * 1000
+    chunks = split_messages(text)
+    assert len(chunks) == 2
+    assert "Nested point" in chunks[0]
+    assert chunks[1].startswith("- b")
 
 
 def test_textbook_markers_and_plain_text():

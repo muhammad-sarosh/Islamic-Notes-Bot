@@ -46,7 +46,9 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE INDEX IF NOT EXISTS job_queue ON jobs(status,id);
 CREATE UNIQUE INDEX IF NOT EXISTS active_generation ON jobs(course_id,(payload->>'video_id'),(payload->>'lecture'))
     WHERE kind='generate' AND status IN ('queued','running');
-CREATE UNIQUE INDEX IF NOT EXISTS one_publication ON jobs((payload->>'draft_id')) WHERE kind='publish';
+DROP INDEX IF EXISTS one_publication;
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_publication ON jobs((payload->>'draft_id'))
+    WHERE kind='publish' AND status IN ('queued','running','needs_attention');
 CREATE TABLE IF NOT EXISTS drafts (
     id bigint PRIMARY KEY REFERENCES jobs(id),
     transcript text NOT NULL,
@@ -76,6 +78,7 @@ CREATE TABLE IF NOT EXISTS pc_worker_presence (
     id integer PRIMARY KEY CHECK (id=1),
     seen_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE publication_parts ADD COLUMN IF NOT EXISTS action text NOT NULL DEFAULT 'send';
 CREATE TABLE IF NOT EXISTS rerank_tasks (
     job_id bigint NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
     chunk integer NOT NULL,

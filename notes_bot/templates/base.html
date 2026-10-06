@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{% block title %}Lecture Notes{% endblock %}</title><link rel="stylesheet" href="/static/app.css">
+{% block assets %}{% endblock %}
 <script src="/static/app.js" defer></script></head><body>
 <header><a class="brand" href="/">Lecture <span>Notes</span></a><nav><a href="/">Jobs</a><a href="/courses">Courses</a><a href="/rules">Rules</a><a href="/pc-worker">PC worker</a></nav>
 {% if user %}<form action="/logout" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="quiet">Sign out · {{ user.name }}</button></form>{% endif %}</header>

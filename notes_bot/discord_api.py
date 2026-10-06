@@ -43,3 +43,14 @@ class DiscordAPI:
                 "allowed_mentions": {"parse": []},
             },
         )
+
+    async def edit(self, channel_id, message_id, content):
+        return await self.request("PATCH", f"channels/{channel_id}/messages/{message_id}",
+                                  json={"content": content, "allowed_mentions": {"parse": []}})
+
+    async def delete(self, channel_id, message_id):
+        try:
+            await self.request("DELETE", f"channels/{channel_id}/messages/{message_id}")
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code != 404 or error.response.json().get("code") != 10008:
+                raise

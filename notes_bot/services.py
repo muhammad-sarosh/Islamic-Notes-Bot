@@ -120,6 +120,7 @@ async def queue_generation(db, slug, lecture, url, author):
 
 
 async def save_draft(db, draft_id, content, revision, author):
+    content = content.replace("\r\n", "\n")
     if not content.strip() or len(content) > 500000:
         raise ValueError("Notes must contain 1–500,000 characters")
     async with db.pool.connection() as conn:
@@ -130,14 +131,15 @@ async def save_draft(db, draft_id, content, revision, author):
             raise ValueError("Draft is not ready")
         publishing = await (
             await conn.execute(
-                "SELECT id FROM jobs WHERE kind='publish' AND payload->>'draft_id'=%s", (str(draft_id),)
+                "SELECT id FROM jobs WHERE kind='publish' AND payload->>'draft_id'=%s "
+                "AND status IN ('queued','running','needs_attention')", (str(draft_id),)
             )
         ).fetchone()
         if publishing:
             raise ValueError("This draft has been submitted for publication and is locked")
         if draft["revision"] != revision:
             raise ValueError("Another save changed this draft. Reload before saving")
-        if content == draft["content"]:
+        if content == draft["content"].replace("\r\n", "\n"):
             return revision
         next_revision = revision + 1
         await conn.execute(
@@ -150,7 +152,9 @@ async def save_draft(db, draft_id, content, revision, author):
         return next_revision
 
 
-async def queue_publication(db, draft_id, expected_revision=None):
+async def queue_publication(db, draft_id, expected_revision=None, mode="update"):
+    if mode not in {"update", "copy"}:
+        raise ValueError("Choose update existing messages or send a new copy")
     async with db.pool.connection() as conn:
         draft = await (
             await conn.execute("SELECT * FROM drafts WHERE id=%s FOR UPDATE", (draft_id,))
@@ -159,7 +163,8 @@ async def queue_publication(db, draft_id, expected_revision=None):
             raise ValueError("Draft is not ready for review")
         existing = await (
             await conn.execute(
-                "SELECT * FROM jobs WHERE kind='publish' AND payload->>'draft_id'=%s", (str(draft_id),)
+                "SELECT * FROM jobs WHERE kind='publish' AND payload->>'draft_id'=%s "
+                "AND status IN ('queued','running','needs_attention')", (str(draft_id),)
             )
         ).fetchone()
         if existing:
@@ -171,18 +176,42 @@ async def queue_publication(db, draft_id, expected_revision=None):
                 "SELECT c.* FROM courses c JOIN jobs j ON j.course_id=c.id WHERE j.id=%s", (draft_id,)
             )
         ).fetchone()
-        if not course["channel_id"]:
+        previous = await (await conn.execute(
+            "SELECT * FROM jobs WHERE kind='publish' AND status='published' "
+            "AND payload->>'draft_id'=%s ORDER BY id DESC LIMIT 1", (str(draft_id),)
+        )).fetchone()
+        old_parts = []
+        if mode == "update" and previous:
+            if previous["payload"]["revision"] == draft["revision"]:
+                return previous
+            old_parts = await (await conn.execute(
+                "SELECT * FROM publication_parts WHERE job_id=%s AND action<>'delete' ORDER BY part",
+                (previous["id"],)
+            )).fetchall()
+            if any(p["state"] != "sent" or not p["message_id"] for p in old_parts):
+                raise ValueError("Previous message IDs are incomplete; send a new copy instead")
+        channel = previous["payload"]["channel_id"] if old_parts else course["channel_id"]
+        if not channel:
             raise ValueError("Configure the course's destination channel first")
-        payload = {"draft_id": draft_id, "revision": draft["revision"], "channel_id": course["channel_id"]}
+        payload = {"draft_id": draft_id, "revision": draft["revision"], "channel_id": channel, "mode": mode}
         job = await (
             await conn.execute(
                 "INSERT INTO jobs(kind,course_id,payload) VALUES ('publish',%s,%s) RETURNING *",
                 (course["id"], Jsonb(payload)),
             )
         ).fetchone()
-        for i, part in enumerate(split_messages(draft["content"])):
+        chunks = split_messages(draft["content"])
+        for i, part in enumerate(chunks):
             await conn.execute(
-                "INSERT INTO publication_parts(job_id,part,content) VALUES (%s,%s,%s)", (job["id"], i, part)
+                "INSERT INTO publication_parts(job_id,part,content,action,message_id) VALUES (%s,%s,%s,%s,%s)",
+                (job["id"], i, part, "edit" if i < len(old_parts) else "send",
+                 old_parts[i]["message_id"] if i < len(old_parts) else None)
+            )
+        for i in range(len(chunks), len(old_parts)):
+            await conn.execute(
+                "INSERT INTO publication_parts(job_id,part,content,action,message_id) "
+                "VALUES (%s,%s,%s,'delete',%s)",
+                (job["id"], i, old_parts[i]["content"], old_parts[i]["message_id"])
             )
         return job
 

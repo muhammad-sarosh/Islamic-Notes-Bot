@@ -34,34 +34,81 @@ def utf16_length(text):
 
 
 def split_messages(text, limit=1900):
-    """Prefer paragraph/line boundaries, never drop content or exceed Discord's UTF-16 limit."""
+    """Original Send Notes workflow: heading sections, points, sentences, hard limit."""
     if not text.strip():
         raise ValueError("Notes cannot be empty")
+    if limit < 2:
+        raise ValueError("Message limit must be at least two UTF-16 units")
+    heading = re.compile(r"^(?:\*\*.+\*\*|#{1,6}\s+.+)$")
+    sections, current = [], []
+    for line in text.replace("\r\n", "\n").strip().split("\n"):
+        if heading.fullmatch(line.strip()) and current:
+            sections.append("\n".join(current).strip())
+            current = []
+        current.append(line)
+    if current:
+        sections.append("\n".join(current).strip())
     output = []
-    remaining = text
-    while utf16_length(remaining) > limit:
-        size = 0
-        end = 0
-        for end, char in enumerate(remaining, 1):
-            size += utf16_length(char)
-            if size > limit:
-                end -= 1
-                break
-        cut = remaining.rfind("\n\n", 0, end + 1)
-        if cut >= end // 2:
-            end = cut + 2
-        else:
-            cut = remaining.rfind("\n", 0, end + 1)
-            if cut >= end // 2:
-                end = cut + 1
-        # A separator can cross the selected boundary; stay within the hard limit.
-        while utf16_length(remaining[:end]) > limit:
-            end -= 1
-        output.append(remaining[:end])
-        remaining = remaining[end:]
-    if remaining:
-        output.append(remaining)
+    for section in filter(None, sections):
+        if utf16_length(section) <= limit:
+            output.append(section)
+            continue
+        lines = section.split("\n")
+        title = lines.pop(0) if heading.fullmatch(lines[0].strip()) else ""
+        points, point = [], []
+        for line in lines:
+            if re.match(r"^(?:[-+*]\s|\d+[.)]\s)", line) and point:
+                points.append("\n".join(point).strip())
+                point = []
+            if point or line.strip():
+                point.append(line)
+        if point:
+            points.append("\n".join(point).strip())
+        chunk = title
+        for point in points:
+            candidate = chunk + "\n\n" + point if chunk else point
+            if utf16_length(candidate) <= limit:
+                chunk = candidate
+                continue
+            if chunk:
+                output.extend(split_long_point(chunk.strip(), limit))
+            if utf16_length(point) > limit:
+                output.extend(split_long_point(point, limit))
+                chunk = ""
+            else:
+                chunk = point
+        if chunk:
+            output.extend(split_long_point(chunk.strip(), limit))
     return output
+
+
+def split_long_point(point, limit):
+    result, chunk = [], ""
+    for sentence in re.split(r"(?<=[.!?])\s+", point):
+        clean = sentence.strip()
+        candidate = chunk + " " + clean if chunk else clean
+        if utf16_length(candidate) <= limit:
+            chunk = candidate
+            continue
+        if chunk:
+            result.append(chunk)
+        if utf16_length(clean) <= limit:
+            chunk = clean
+        else:
+            piece, size = "", 0
+            for char in clean:
+                width = utf16_length(char)
+                if size + width > limit:
+                    result.append(piece)
+                    piece, size = "", 0
+                piece += char
+                size += width
+            if piece:
+                result.append(piece)
+            chunk = ""
+    if chunk:
+        result.append(chunk)
+    return result
 
 
 def textbook_pages(text):
