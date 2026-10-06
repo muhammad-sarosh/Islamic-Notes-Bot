@@ -22,7 +22,7 @@ test = ["pytest>=8,<10", "pytest-asyncio>=0.25,<2", "ruff>=0.11,<1"]
 include = ["notes_bot*"]
 
 [tool.setuptools.package-data]
-notes_bot = ["schema.sql", "templates/*.html", "static/*", "defaults/*.md"]
+notes_bot = ["schema.sql", "templates/*.html", "static/*", "defaults/*.md", "resources/*.zip"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

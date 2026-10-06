@@ -1,4 +1,6 @@
+import io
 import json
+import zipfile
 from base64 import b64encode
 from dataclasses import replace
 from pathlib import Path
@@ -46,6 +48,30 @@ async def test_signed_out_redirects_and_no_external_calls():
         assert response.headers["location"] == "/login"
         assert (await client.get("/login")).status_code == 200
         assert (await client.post("/preview", data={"content": "test"})).status_code == 303
+
+
+async def test_skill_download_requires_authorized_login_and_contains_complete_skill():
+    config = settings()
+    app = create_app(config)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="https://notes.test"
+    ) as client:
+        assert (await client.get("/resources/clean-pdf-text.zip")).status_code == 303
+        for identity, expected_status in [("2", 303), ("1", 200)]:
+            session = {"user": {"id": identity, "name": "Test"}}
+            cookie = TimestampSigner(config.session_secret).sign(
+                b64encode(json.dumps(session).encode())
+            ).decode()
+            client.cookies.set("notes_session", cookie, domain="notes.test", path="/")
+            response = await client.get("/resources/clean-pdf-text.zip")
+            assert response.status_code == expected_status
+        assert "attachment" in response.headers["content-disposition"]
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            assert set(archive.namelist()) == {
+                "clean-pdf-text/SKILL.md",
+                "clean-pdf-text/scripts/verify_pages.py",
+                "clean-pdf-text/agents/openai.yaml",
+            }
 
 
 def test_templates_compile():

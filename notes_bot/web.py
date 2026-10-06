@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 import bleach
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markdown_it import MarkdownIt
@@ -224,6 +224,15 @@ def create_app(settings=None):
             "ORDER BY j.id DESC LIMIT 100"
         )
         return page(request, "home.html", jobs=jobs)
+
+    @app.get("/resources/clean-pdf-text.zip")
+    async def download_pdf_skill(request: Request):
+        user(request)
+        return FileResponse(
+            ROOT / "resources" / "clean-pdf-text.zip",
+            media_type="application/zip",
+            filename="clean-pdf-text.zip",
+        )
 
     @app.get("/courses")
     async def courses(request: Request):
