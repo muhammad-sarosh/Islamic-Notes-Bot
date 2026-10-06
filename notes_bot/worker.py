@@ -162,13 +162,23 @@ class Worker:
             return await self.ml(job, directory, "rerank", data)
         remote = RemoteRerank(self.db)
         await remote.prepare(job["id"], data)
+        checkpoint = directory / "rerank-scores.json"
+        if checkpoint.exists():
+            saved = json.loads(checkpoint.read_text(encoding="utf-8"))
+            for i, value in enumerate(saved, 1):
+                if value is not None:
+                    validate_scores(value, len(data["candidates"][i - 1]))
+                    await self.db.execute(
+                        "UPDATE rerank_tasks SET state='completed',scores=%s,claim=NULL,lease_until=NULL "
+                        "WHERE job_id=%s AND chunk=%s AND state='pending'",
+                        (Jsonb(value), job["id"], i),
+                    )
         rows = await remote.wait_or_fallback(job["id"])
         if all(row["state"] == "completed" for row in rows):
             return context_from_results(data["chunks"], [
                 rank_candidates(candidates, row["scores"])
                 for candidates, row in zip(data["candidates"], rows, strict=True)
             ])
-        checkpoint = directory / "rerank-scores.json"
         scores = [row["scores"] for row in rows]
         checkpoint.write_text(json.dumps(scores), encoding="utf-8")
 
@@ -274,9 +284,13 @@ class Worker:
             transcript = "\n\n".join(transcripts)
             if not transcript.strip():
                 raise ValueError("Transcription was empty")
-            candidates = await self.ml(
-                job, directory, "candidates", {"transcript": transcript, "items": book["items"]}
-            )
+            cached_candidates = directory / "candidates-out.json"
+            if cached_candidates.exists():
+                candidates = json.loads(cached_candidates.read_text(encoding="utf-8"))
+            else:
+                candidates = await self.ml(
+                    job, directory, "candidates", {"transcript": transcript, "items": book["items"]}
+                )
             context = await self.rerank(job, directory, candidates)
             rules = {r["scope"]: r["content"] for r in payload["rules"]}
             instructions = "\n\n".join(
@@ -370,12 +384,42 @@ class Worker:
                 (job["payload"]["draft_id"],),
             )
 
+    async def controlled_generate(self, job, directory):
+        task = asyncio.create_task(self.generate(job, directory))
+        try:
+            while not task.done():
+                await asyncio.wait({task}, timeout=1)
+                current = await self.db.one("SELECT status,payload FROM jobs WHERE id=%s", (job["id"],))
+                action = current["payload"].get("control") if current else None
+                if action and current["status"] == "running":
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+                    # Invalidate remote work before acknowledging the control or requeueing.
+                    await self.db.execute(
+                        "UPDATE rerank_tasks SET state='local',claim=NULL,lease_until=NULL "
+                        "WHERE job_id=%s AND state<>'completed'", (job["id"],)
+                    )
+                    status = {"pause": "paused", "stop": "cancelled", "restart": "queued"}[action]
+                    stage = {"pause": "Paused; saved work retained", "stop": "Stopped; saved work retained",
+                             "restart": "Restart queued; checking PC worker"}[action]
+                    await self.db.execute(
+                        "UPDATE jobs SET status=%s,stage=%s,payload=payload-'control',error=NULL,"
+                        "updated_at=now() WHERE id=%s", (status, stage, job["id"])
+                    )
+                    return
+            await task
+        finally:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            await self.db.execute("UPDATE jobs SET payload=payload-'control' WHERE id=%s", (job["id"],))
+
     async def recover(self):
         async with self.db.pool.connection() as conn:
             await conn.execute(
                 "UPDATE jobs SET status=CASE WHEN kind='publish' THEN 'needs_attention' ELSE 'failed' END,"
                 "stage='Worker interrupted',error='Worker restarted; review and retry explicitly',"
-                "updated_at=now() WHERE status='running'"
+                "payload=payload-'control',updated_at=now() WHERE status='running'"
             )
             await conn.execute("UPDATE books SET status='failed' WHERE status='running'")
 
@@ -400,7 +444,7 @@ class Worker:
                     await self.index(job, directory)
                     shutil.rmtree(directory)
                 elif job["kind"] == "generate":
-                    await self.generate(job, directory)
+                    await self.controlled_generate(job, directory)
                 else:
                     await self.publish(job)
                     shutil.rmtree(directory)

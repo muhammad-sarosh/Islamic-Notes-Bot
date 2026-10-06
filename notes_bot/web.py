@@ -20,6 +20,7 @@ from notes_bot.db import Database
 from notes_bot.discord_api import DiscordAPI
 from notes_bot.remote_rerank import RemoteRerank
 from notes_bot.services import (
+    control_generation,
     create_course,
     queue_index,
     queue_publication,
@@ -478,7 +479,8 @@ def create_app(settings=None):
         job = await db.job(job_id)
         if not job:
             raise HTTPException(404, "Job not found")
-        return {key: job[key] for key in ["id", "status", "stage", "error"]}
+        return {**{key: job[key] for key in ["id", "status", "stage", "error"]},
+                "control": job["payload"].get("control", "")}
 
     @app.post("/jobs/{job_id}/save")
     async def edit_draft(request: Request, job_id: int):
@@ -498,6 +500,12 @@ def create_app(settings=None):
     async def retry(request: Request, job_id: int):
         await form(request)
         await retry_job(db, job_id)
+        return RedirectResponse(f"/jobs/{job_id}", status_code=303)
+
+    @app.post("/jobs/{job_id}/control/{action}")
+    async def control_job(request: Request, job_id: int, action: str):
+        await form(request)
+        await control_generation(db, job_id, action)
         return RedirectResponse(f"/jobs/{job_id}", status_code=303)
 
     @app.post("/preview")

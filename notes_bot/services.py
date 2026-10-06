@@ -219,8 +219,8 @@ async def queue_publication(db, draft_id, expected_revision=None, mode="update")
 async def retry_job(db, job_id):
     async with db.pool.connection() as conn:
         job = await (await conn.execute("SELECT * FROM jobs WHERE id=%s FOR UPDATE", (job_id,))).fetchone()
-        if not job or job["status"] != "failed" or job["kind"] == "publish":
-            raise ValueError("Only failed generation or indexing jobs can be retried automatically")
+        if not job or job["status"] not in {"failed", "paused", "cancelled"} or job["kind"] == "publish":
+            raise ValueError("Only failed, paused, or stopped processing jobs can be resumed or retried")
         await conn.execute("SELECT id FROM courses WHERE id=%s FOR UPDATE", (job["course_id"],))
         if job["kind"] == "generate":
             duplicate = await (
@@ -246,3 +246,23 @@ async def retry_job(db, job_id):
             "UPDATE jobs SET status='queued',stage='Retry queued',error=NULL,updated_at=now() WHERE id=%s",
             (job_id,),
         )
+
+
+async def control_generation(db, job_id, action):
+    if action not in {"pause", "stop", "restart"}:
+        raise ValueError("Unknown job control")
+    async with db.pool.connection() as conn:
+        job = await (await conn.execute("SELECT * FROM jobs WHERE id=%s FOR UPDATE", (job_id,))).fetchone()
+        if not job or job["kind"] != "generate" or job["status"] not in {"queued", "running", "paused"}:
+            raise ValueError("This lecture is not available for processing controls")
+        if job["payload"].get("control"):
+            raise ValueError("A control request is already being processed")
+        if job["status"] == "paused" and action != "stop":
+            raise ValueError("Resume the paused lecture first")
+        if job["status"] == "running":
+            payload = {**job["payload"], "control": action}
+            await conn.execute("UPDATE jobs SET payload=%s,updated_at=now() WHERE id=%s", (Jsonb(payload), job_id))
+        else:
+            status = {"pause": "paused", "stop": "cancelled", "restart": "queued"}[action]
+            await conn.execute("UPDATE jobs SET status=%s,stage=%s,updated_at=now() WHERE id=%s",
+                               (status, "Paused" if status == "paused" else "Stopped", job_id))

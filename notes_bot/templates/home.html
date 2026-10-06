@@ -4,7 +4,7 @@
 <label>Search<input type="search" name="q" value="{{ filters.q }}" maxlength="200" placeholder="Lecture, course, job ID or notes text"></label>
 <label>Course<select name="course"><option value="">All courses</option>{% for course in courses %}<option value="{{ course.id }}" {{ 'selected' if filters.course==course.id|string else '' }}>{{ course.name }}</option>{% endfor %}</select></label>
 <label>Task<select name="kind"><option value="">All tasks</option>{% for kind in ['generate','index','publish'] %}<option {{ 'selected' if filters.kind==kind else '' }} value="{{ kind }}">{{ kind|title }}</option>{% endfor %}</select></label>
-<label>Status<select name="status"><option value="">All statuses</option>{% for status in ['queued','running','ready','published','completed','failed','needs_attention','cancelled'] %}<option {{ 'selected' if filters.status==status else '' }} value="{{ status }}">{{ status|replace('_',' ')|title }}</option>{% endfor %}</select></label>
+<label>Status<select name="status"><option value="">All statuses</option>{% for status in ['queued','running','ready','published','completed','failed','paused','needs_attention','cancelled'] %}<option {{ 'selected' if filters.status==status else '' }} value="{{ status }}">{{ status|replace('_',' ')|title }}</option>{% endfor %}</select></label>
 <div class="actions"><button>Apply filters</button><a href="/">Clear</a></div></form>
 <p class="muted">{{ total }} matching jobs · Page {{ page_number }}</p>
 <section class="panel table-wrap"><table><thead><tr><th>Job</th><th>Course</th><th>Task</th><th>Status</th><th>Progress</th></tr></thead><tbody>

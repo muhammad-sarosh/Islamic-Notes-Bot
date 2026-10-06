@@ -142,7 +142,10 @@ def main():
         result = context_from_results(data["chunks"], results)
     else:
         raise ValueError("Unknown ML stage")
-    Path(output_file).write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    output = Path(output_file)
+    temporary = output.with_suffix(".tmp")
+    temporary.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    temporary.replace(output)
 
 
 if __name__ == "__main__":

@@ -63,6 +63,9 @@ if (jobPanel && ['queued', 'running'].includes(jobPanel.dataset.status)) {
       const response = await fetch(`/api/jobs/${jobPanel.dataset.job}`);
       if (!response.ok || response.redirected) { stopped = true; return; }
       const job = await response.json();
+      if ((job.control || '') !== jobPanel.dataset.control || job.status !== jobPanel.dataset.status) {
+        stopped = true; location.reload(); return;
+      }
       document.querySelector('#job-status').textContent = job.status.replaceAll('_', ' ');
       document.querySelector('#job-stage').textContent = job.stage;
       document.querySelector('#job-error').textContent = job.error || '';

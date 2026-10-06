@@ -1,7 +1,14 @@
 {% extends "base.html" %}{% block assets %}{% if draft and not locked %}<link rel="stylesheet" href="/static/editor.min.css"><link rel="stylesheet" href="/static/editor-dark.min.css"><script src="/static/purify.min.js" defer></script><script src="/static/editor.min.js" defer></script>{% endif %}{% endblock %}{% block content %}
 <p class="eyebrow">{{ job.course_name }} · JOB {{ job.id }}</p><h1>{{ 'Lecture ' ~ job.payload.lecture if job.payload.lecture else job.kind|title }}</h1>
-<section class="panel status-panel" data-job="{{ job.id }}" data-status="{{ job.status }}"><span class="badge {{ job.status }}" id="job-status">{{ job.status|replace('_',' ') }}</span><p id="job-stage">{{ job.stage }}</p><p class="error" id="job-error">{{ job.error or '' }}</p>
-{% if job.status=='failed' and job.kind!='publish' %}<form method="post" action="/jobs/{{ job.id }}/retry"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Retry job</button></form>{% endif %}</section>
+<section class="panel status-panel" data-job="{{ job.id }}" data-status="{{ job.status }}" data-control="{{ job.payload.control or '' }}"><span class="badge {{ job.status }}" id="job-status">{{ job.status|replace('_',' ') }}</span><p id="job-stage">{{ job.stage }}</p><p class="error" id="job-error">{{ job.error or '' }}</p>
+{% if job.payload.control %}<p>Applying {{ job.payload.control }} request…</p>
+{% else %}<div class="actions">
+{% if job.status in ['failed','paused','cancelled'] and job.kind!='publish' %}<form method="post" action="/jobs/{{ job.id }}/retry"><input type="hidden" name="csrf" value="{{ csrf }}"><button>{{ 'Resume job' if job.status=='paused' else 'Retry job' }}</button></form>{% endif %}
+{% if job.kind=='generate' and job.status in ['queued','running','paused'] %}
+{% for action,label in [('pause','Pause'),('stop','Stop'),('restart','Restart processing · try PC again')] %}
+{% if (job.status!='paused' or action=='stop') and (action!='restart' or job.status=='running') %}<form method="post" action="/jobs/{{ job.id }}/control/{{ action }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="quiet">{{ label }}</button></form>{% endif %}
+{% endfor %}{% endif %}</div>{% endif %}
+{% if job.kind=='generate' %}<p class="muted">Pause and stop retain saved work. Resume, retry, or restart checks the PC worker again, with VPS fallback if unavailable. Refreshing this page only updates progress.</p>{% endif %}</section>
 {% if draft %}
 <form id="editor-form" method="post" action="/jobs/{{ job.id }}/save"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="revision" value="{{ draft.revision }}">
 <div class="heading"><h2>Review notes · Revision {{ draft.revision }}</h2><div class="actions"><a href="/jobs/{{ job.id }}/download">Download Markdown</a>{% if not locked %}<button>Save draft</button><button class="publish" formaction="/jobs/{{ job.id }}/publish" data-publish>{{ 'Save and republish' if publication else 'Save and publish' }}</button>{% endif %}</div></div>
