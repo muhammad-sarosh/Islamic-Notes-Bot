@@ -1,4 +1,10 @@
 document.querySelector('[data-back]')?.addEventListener('click', () => history.back());
+document.querySelector('[data-open-publish]')?.addEventListener('click', () => {
+  const panel = document.querySelector('#publish-options');
+  panel.open = true;
+  document.querySelector('.notes-menu').open = false;
+  panel.querySelector('select,button').focus();
+});
 document.querySelectorAll('[data-job-href]').forEach(row => {
   row.addEventListener('click', event => {
     if (event.target.closest('a,button,input,select') || window.getSelection().toString()) return;

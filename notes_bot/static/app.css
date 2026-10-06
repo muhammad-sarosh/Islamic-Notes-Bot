@@ -214,3 +214,27 @@ nav a:focus-visible, button:focus-visible, .button:focus-visible { background: #
 }
 @media(forced-colors:active) { select { appearance: auto; background-image: none; } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior: auto !important; } }
+/* Compact review tools and actions stay in the page flow. */
+.review-heading { flex-wrap: nowrap; }
+.review-heading h2 { flex-wrap: wrap; }
+.compact-tools { display: flex; flex: none; gap: 8px; }
+.icon-button, .notes-menu > summary { width: 44px; height: 44px; padding: 10px; display: grid; place-items: center; }
+.icon-button svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.notes-menu { position: relative; }
+.notes-menu > summary { list-style: none; border: 1px solid #536a6c; border-radius: 6px; font-size: 24px; line-height: 1; }
+.notes-menu > summary::-webkit-details-marker { display: none; }
+.notes-menu-items { position: absolute; z-index: 5; top: 52px; right: 0; min-width: 210px; padding: 8px; background: #203b3f; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px #0004; }
+.notes-menu-items a, .notes-menu-items button { display: block; width: 100%; padding: 12px; text-align: left; font-size: 14px; border: 0; }
+.publish-options { margin-bottom: 22px; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+.publish-options:not([open]) { display: none; }
+.publish-options label { margin-top: 12px; }
+.editor-modes .save-draft { margin-left: auto; }
+.editor-modes small { width: 100%; margin: 0; }
+@media(max-width:550px) {
+  .review-heading { display: flex; gap: 10px; align-items: center; }
+  .review-heading h2 { display: flex; gap: 8px; font-size: 23px; }
+  .compact-tools > button { width: 44px; padding: 10px; }
+  .editor-modes { grid-template-columns: 1fr 1fr auto; gap: 6px; }
+  .editor-modes button { padding: 9px 10px; font-size: 12px; }
+  .editor-modes small { grid-column: 1/-1; }
+}
