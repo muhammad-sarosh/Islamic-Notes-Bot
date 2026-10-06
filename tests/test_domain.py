@@ -61,6 +61,17 @@ def test_discord_split_oversized_section_at_top_level_points():
     assert chunks[1].startswith("- b")
 
 
+@pytest.mark.parametrize("heading", ["**Topic**", "## Topic"])
+@pytest.mark.parametrize("blank", ["", "\n", "\n \n"])
+def test_discord_heading_has_no_blank_line_for_short_and_split_sections(heading, blank):
+    for size in [10, 1000]:
+        text = heading + "\n" + blank + "- " + "a" * size + "\n- " + "b" * size
+        parts = split_messages(text)
+        assert parts[0].startswith(heading + "\n- ")
+        assert all(utf16_length(part) <= 1900 for part in parts)
+        assert "".join("".join(parts).split()) == "".join(text.split())
+
+
 def test_textbook_markers_and_plain_text():
     assert textbook_pages("===== PAGE 12 =====\nمرحبا\n===== PAGE 13 =====\nSecond") == [
         (12, "مرحبا"),

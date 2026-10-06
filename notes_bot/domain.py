@@ -50,6 +50,8 @@ def split_messages(text, limit=1900):
         sections.append("\n".join(current).strip())
     output = []
     for section in filter(None, sections):
+        # Discord format rules require the first point directly below its heading.
+        section = re.sub(r"^((?:\*\*.+\*\*|#{1,6}\s+.+))\n(?:[ \t]*\n)+", r"\1\n", section)
         if utf16_length(section) <= limit:
             output.append(section)
             continue
@@ -66,7 +68,8 @@ def split_messages(text, limit=1900):
             points.append("\n".join(point).strip())
         chunk = title
         for point in points:
-            candidate = chunk + "\n\n" + point if chunk else point
+            separator = "\n" if title and chunk == title else "\n\n"
+            candidate = chunk + separator + point if chunk else point
             if utf16_length(candidate) <= limit:
                 chunk = candidate
                 continue
