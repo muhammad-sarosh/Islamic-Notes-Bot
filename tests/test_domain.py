@@ -85,6 +85,18 @@ def test_discord_points_have_single_line_breaks(size):
     assert "".join("".join(parts).split()) == "".join(text.split())
 
 
+@pytest.mark.parametrize("separator", ["\n", "\n\n"])
+def test_discord_split_separates_numbered_and_bulleted_lists(separator):
+    text = f"**Conditions**\n5. Final condition.{separator}- The mahr is separate."
+    assert split_messages(text) == ["**Conditions**\n5. Final condition.\n\n- The mahr is separate."]
+
+
+def test_discord_split_preserves_list_type_separator_when_chunking():
+    text = "**Conditions**\n5. Final condition.\n- The mahr is separate.\n1. " + "x" * 1850
+    parts = split_messages(text)
+    assert parts[0] == "**Conditions**\n5. Final condition.\n\n- The mahr is separate."
+
+
 def test_long_numbered_point_preserves_newlines_and_nested_indentation():
     text = "2. **Consent.** " + "a" * 900 + ".\n  - " + "b" * 900 + ".\n  - " + "c" * 900 + "."
     parts = split_long_point(text, 1900)

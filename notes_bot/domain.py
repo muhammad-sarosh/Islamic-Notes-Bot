@@ -33,6 +33,37 @@ def utf16_length(text):
     return len(text.encode("utf-16-le")) // 2
 
 
+def _list_item_marker(line):
+    match = re.match(r"^([ \t]*)([-+*]|\d+[.)])\s", line)
+    if not match:
+        return None
+    indent = len(match[1].expandtabs(4))
+    ordered = match[2] not in {"-", "+", "*"}
+    return indent, ordered
+
+
+def _normalize_list_spacing(section):
+    lines, list_types = [], {}
+    for line in section.split("\n"):
+        marker = _list_item_marker(line)
+        if marker:
+            indent, ordered = marker
+            while lines and not lines[-1].strip():
+                lines.pop()
+            if list_types.get(indent) is not None and list_types[indent] != ordered:
+                lines.append("")
+            lines.append(line)
+            list_types = {level: kind for level, kind in list_types.items() if level < indent}
+            list_types[indent] = ordered
+        else:
+            lines.append(line)
+            if line.strip():
+                indent = len(line) - len(line.lstrip(" \t"))
+                indent = len(line[:indent].expandtabs(4))
+                list_types = {level: kind for level, kind in list_types.items() if level <= indent}
+    return "\n".join(lines)
+
+
 def split_messages(text, limit=1900):
     """Original Send Notes workflow: heading sections, points, sentences, hard limit."""
     if not text.strip():
@@ -52,7 +83,7 @@ def split_messages(text, limit=1900):
     for section in filter(None, sections):
         # Discord format rules require the first point directly below its heading.
         section = re.sub(r"^((?:\*\*.+\*\*|#{1,6}\s+.+))\n(?:[ \t]*\n)+", r"\1\n", section)
-        section = re.sub(r"\n(?:[ \t]*\n)+(?=[ \t]*(?:[-+*]\s|\d+[.)]\s))", "\n", section)
+        section = _normalize_list_spacing(section)
         if utf16_length(section) <= limit:
             output.append(section)
             continue
@@ -68,19 +99,32 @@ def split_messages(text, limit=1900):
         if point:
             points.append("\n".join(point).strip())
         chunk = title
+        previous_point_marker = None
         for point in points:
             separator = "\n"
+            point_marker = _list_item_marker(point.split("\n", 1)[0])
+            if (
+                chunk
+                and previous_point_marker
+                and point_marker
+                and previous_point_marker[0] == point_marker[0]
+                and previous_point_marker[1] != point_marker[1]
+            ):
+                separator = "\n\n"
             candidate = chunk + separator + point if chunk else point
             if utf16_length(candidate) <= limit:
                 chunk = candidate
+                previous_point_marker = point_marker
                 continue
             if chunk:
                 output.extend(split_long_point(chunk.strip(), limit))
             if utf16_length(point) > limit:
                 output.extend(split_long_point(point, limit))
                 chunk = ""
+                previous_point_marker = None
             else:
                 chunk = point
+                previous_point_marker = point_marker
         if chunk:
             output.extend(split_long_point(chunk.strip(), limit))
     return output
