@@ -17,6 +17,89 @@ const statusText = document.querySelector('#editor-status');
 let dirty = false;
 let richEditor;
 const richHost = document.querySelector('#rich-editor');
+const notesForm = document.querySelector('#editor-form');
+const fullscreenButton = document.querySelector('#notes-fullscreen');
+const notesReading = document.querySelector('#notes-reading');
+let saveTimer = null;
+let saveInFlight = null;
+let closingFullscreen = false;
+
+function editorContent() {
+  return richEditor ? richEditor.getMarkdown() : editor.value;
+}
+
+function scheduleFullscreenSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { void saveDraftQuietly(); }, 900);
+}
+
+async function sendDraftSave(content) {
+  const data = new FormData(notesForm);
+  data.set('content', content);
+  const response = await fetch(notesForm.action, {
+    method: 'POST', body: data, headers: {Accept: 'application/json'}
+  });
+  let result;
+  try { result = await response.json(); } catch { result = null; }
+  if (!response.ok || response.redirected || !Number.isInteger(result?.revision)) {
+    throw new Error(result?.error || 'Save failed. Your edits are still here; try saving again.');
+  }
+  notesForm.querySelector('input[name="revision"]').value = result.revision;
+  if (editorContent() === content) {
+    dirty = false;
+    statusText.textContent = 'Saved';
+  } else {
+    dirty = true;
+    statusText.textContent = 'Saving latest changes…';
+  }
+}
+
+async function saveDraftQuietly() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (saveInFlight) {
+    const saved = await saveInFlight;
+    if (!saved) return false;
+    return dirty ? saveDraftQuietly() : true;
+  }
+  if (!dirty) return true;
+
+  const content = editorContent();
+  editor.value = content;
+  statusText.textContent = 'Saving…';
+  const request = (async () => {
+    try {
+      await sendDraftSave(content);
+      return true;
+    } catch (error) {
+      statusText.textContent = error.message;
+      return false;
+    }
+  })();
+  saveInFlight = request;
+  const saved = await request;
+  if (saveInFlight === request) saveInFlight = null;
+  if (!saved) return false;
+  return dirty ? saveDraftQuietly() : true;
+}
+
+function markEditorDirty() {
+  dirty = true;
+  statusText.textContent = 'Unsaved changes';
+  if (richEditor && notesReading?.open) scheduleFullscreenSave();
+}
+
+async function closeFullscreenAfterSave() {
+  if (closingFullscreen) return;
+  closingFullscreen = true;
+  try {
+    if (richEditor && dirty && !(await saveDraftQuietly())) return;
+    notesReading.close();
+  } finally {
+    closingFullscreen = false;
+  }
+}
+
 if (richHost && window.toastui?.Editor) {
   const original = editor.value;
   let ready = false;
@@ -24,7 +107,7 @@ if (richHost && window.toastui?.Editor) {
     el: richHost, height: '700px', initialEditType: 'wysiwyg', previewStyle: 'tab',
     initialValue: original, theme: 'dark', hideModeSwitch: true, usageStatistics: false,
     customHTMLSanitizer: html => DOMPurify.sanitize(html),
-    events: { change: () => { if (ready) { dirty = true; statusText.textContent = 'Unsaved changes'; } } }
+    events: { change: () => { if (ready) markEditorDirty(); } }
   });
   document.querySelector('#source-fallback').hidden = true;
   ready = true;
@@ -48,17 +131,20 @@ if (richHost && window.toastui?.Editor) {
     }
   }, true);
 }
-editor?.addEventListener('input', () => { dirty = true; statusText.textContent = 'Unsaved changes'; });
-const notesForm = document.querySelector('#editor-form');
-const fullscreenButton = document.querySelector('#notes-fullscreen');
-const notesReading = document.querySelector('#notes-reading');
+editor?.addEventListener('input', markEditorDirty);
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && notesReading?.open) {
     event.preventDefault();
     event.stopPropagation();
-    notesReading.close();
+    void closeFullscreenAfterSave();
   }
 }, true);
+notesReading?.addEventListener('cancel', event => {
+  if (richEditor) {
+    event.preventDefault();
+    void closeFullscreenAfterSave();
+  }
+});
 const editorHome = richHost?.parentNode;
 const editorNext = richHost?.nextSibling;
 fullscreenButton?.addEventListener('click', async () => {
@@ -72,6 +158,7 @@ fullscreenButton?.addEventListener('click', async () => {
       document.body.classList.add('notes-reading-open');
       richEditor.setHeight('calc(100dvh - 64px)');
       richEditor.focus();
+      if (dirty) scheduleFullscreenSave();
       return;
     }
     const data = new FormData();
@@ -102,10 +189,16 @@ notesReading?.addEventListener('close', () => {
 window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
 document.querySelector('#editor-form')?.addEventListener('submit', event => {
   if (richEditor && dirty) editor.value = richEditor.getMarkdown();
-  if (event.submitter?.hasAttribute('data-publish') && !confirm('Publish these notes to the configured course channel?')) {
-    event.preventDefault(); return;
+  if (event.submitter?.hasAttribute('data-publish')) {
+    if (!confirm('Publish these notes to the configured course channel?')) {
+      event.preventDefault(); return;
+    }
+    clearTimeout(saveTimer);
+    dirty = false;
+    return;
   }
-  dirty = false;
+  event.preventDefault();
+  void saveDraftQuietly();
 });
 document.querySelector('#preview-button')?.addEventListener('click', async () => {
   const button = document.querySelector('#preview-button'); button.disabled = true;

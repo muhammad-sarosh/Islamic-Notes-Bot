@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 import bleach
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markdown_it import MarkdownIt
@@ -496,7 +496,15 @@ def create_app(settings=None):
     @app.post("/jobs/{job_id}/save")
     async def edit_draft(request: Request, job_id: int):
         data = await form(request)
-        await save_draft(db, job_id, data["content"], int(data["revision"]), user(request)["id"])
+        wants_json = "application/json" in request.headers.get("accept", "")
+        try:
+            revision = await save_draft(db, job_id, data["content"], int(data["revision"]), user(request)["id"])
+        except ValueError as error:
+            if wants_json:
+                return JSONResponse({"error": str(error)}, status_code=400)
+            raise
+        if wants_json:
+            return JSONResponse({"revision": revision})
         return RedirectResponse(f"/jobs/{job_id}", status_code=303)
 
     @app.post("/jobs/{job_id}/publish")

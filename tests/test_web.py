@@ -104,6 +104,30 @@ async def test_preview_requires_valid_session_and_csrf():
         assert (await client.get("/")).status_code == 303
 
 
+async def test_save_draft_returns_revision_for_quiet_autosave(monkeypatch):
+    config = settings()
+    app = create_app(config)
+
+    async def fake_save_draft(db, draft_id, content, revision, author):
+        assert (draft_id, content, revision, author) == (42, "Updated notes", 3, "1")
+        return 4
+
+    monkeypatch.setattr("notes_bot.web.save_draft", fake_save_draft)
+    session = {"user": {"id": "1", "name": "Owner"}, "csrf": "known-token"}
+    cookie = TimestampSigner(config.session_secret).sign(b64encode(json.dumps(session).encode())).decode()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="https://notes.test"
+    ) as client:
+        client.cookies.set("notes_session", cookie, domain="notes.test", path="/")
+        response = await client.post(
+            "/jobs/42/save",
+            data={"content": "Updated notes", "revision": "3", "csrf": "known-token"},
+            headers={"Accept": "application/json"},
+        )
+        assert response.status_code == 200
+        assert response.json() == {"revision": 4}
+
+
 async def test_localhost_login_cookie_supports_http():
     app = create_app(replace(settings(), public_url="http://localhost:8000", development=True))
     async with httpx.AsyncClient(
