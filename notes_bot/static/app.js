@@ -18,6 +18,7 @@ let dirty = false;
 let richEditor;
 const richHost = document.querySelector('#rich-editor');
 const notesForm = document.querySelector('#editor-form');
+const saveButton = notesForm?.querySelector('.save-draft');
 const fullscreenButton = document.querySelector('#notes-fullscreen');
 const notesReading = document.querySelector('#notes-reading');
 let saveTimer = null;
@@ -45,6 +46,7 @@ async function sendDraftSave(content) {
     throw new Error(result?.error || 'Save failed. Your edits are still here; try saving again.');
   }
   notesForm.querySelector('input[name="revision"]').value = result.revision;
+  notesForm.querySelector('.revision').textContent = `Revision ${result.revision}`;
   if (editorContent() === content) {
     dirty = false;
     statusText.textContent = 'Saved';
@@ -85,6 +87,7 @@ async function saveDraftQuietly() {
 
 function markEditorDirty() {
   dirty = true;
+  if (saveButton && !saveButton.disabled) saveButton.textContent = 'Save draft';
   statusText.textContent = 'Unsaved changes';
   if (richEditor && notesReading?.open) scheduleFullscreenSave();
 }
@@ -187,7 +190,7 @@ notesReading?.addEventListener('close', () => {
   fullscreenButton.focus();
 });
 window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
-document.querySelector('#editor-form')?.addEventListener('submit', event => {
+document.querySelector('#editor-form')?.addEventListener('submit', async event => {
   if (richEditor && dirty) editor.value = richEditor.getMarkdown();
   if (event.submitter?.hasAttribute('data-publish')) {
     if (!confirm('Publish these notes to the configured course channel?')) {
@@ -198,7 +201,18 @@ document.querySelector('#editor-form')?.addEventListener('submit', event => {
     return;
   }
   event.preventDefault();
-  void saveDraftQuietly();
+  if (saveButton.disabled) return;
+  saveButton.disabled = true;
+  saveButton.textContent = 'Saving…';
+  saveButton.setAttribute('aria-busy', 'true');
+  try {
+    const saved = await saveDraftQuietly();
+    saveButton.textContent = saved ? '✓ Saved' : 'Retry save';
+    if (saved) statusText.textContent = 'Draft saved';
+  } finally {
+    saveButton.disabled = false;
+    saveButton.removeAttribute('aria-busy');
+  }
 });
 document.querySelector('#preview-button')?.addEventListener('click', async () => {
   const button = document.querySelector('#preview-button'); button.disabled = true;
