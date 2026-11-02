@@ -306,7 +306,7 @@ class Worker:
                 raise ValueError(
                     "Lecture exceeds configured generation context budget; increase it only if the model supports it"
                 )
-            await self.db.progress(job["id"], "Generating notes through 9router")
+            await self.db.progress(job["id"], "Generating notes")
             headers = {"Authorization": f"Bearer {s.llm_key}"} if s.llm_key else {}
             result = await api_post(
                 client,

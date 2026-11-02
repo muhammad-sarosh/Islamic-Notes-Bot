@@ -1,10 +1,4 @@
 document.querySelector('[data-back]')?.addEventListener('click', () => history.back());
-document.querySelector('[data-open-publish]')?.addEventListener('click', () => {
-  const panel = document.querySelector('#publish-options');
-  panel.open = true;
-  document.querySelector('.notes-menu').open = false;
-  panel.querySelector('select,button').focus();
-});
 document.querySelectorAll('[data-job-href]').forEach(row => {
   row.addEventListener('click', event => {
     if (event.target.closest('a,button,input,select') || window.getSelection().toString()) return;
@@ -193,7 +187,7 @@ window.addEventListener('beforeunload', event => { if (dirty) { event.preventDef
 document.querySelector('#editor-form')?.addEventListener('submit', async event => {
   if (richEditor && dirty) editor.value = richEditor.getMarkdown();
   if (event.submitter?.hasAttribute('data-publish')) {
-    if (!confirm('Publish these notes to the configured course channel?')) {
+    if (!confirm('Save your latest edits and publish these notes to the configured course channel?')) {
       event.preventDefault(); return;
     }
     clearTimeout(saveTimer);

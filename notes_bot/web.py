@@ -97,7 +97,7 @@ def create_app(settings=None):
         secret_key=settings.session_secret,
         https_only=settings.public_url.startswith("https://"),
         same_site="lax",
-        max_age=86400,
+        max_age=30 * 24 * 60 * 60,
         session_cookie="notes_session",
     )
     app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
